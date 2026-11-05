@@ -15,7 +15,11 @@ from Selection import Selection
 from pico2d import load_image, load_font, load_music
 from sdl2 import SDL_KEYDOWN, SDLK_ESCAPE
 
-
+# 상위폴더 경로를 sys.path에 추가 common 폴더안 모듈을 import하기 위해
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+from common import protocol
 
 class Timer():
     def __init__(self):
