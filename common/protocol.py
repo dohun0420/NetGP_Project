@@ -37,7 +37,7 @@ def unpack_header(header_bytes):
 
 
 # =====================================================================
-# 패킷 pack / unpack : INPUT, SHOP_BUY, JOIN_OK, LOBBY_STATE, ERROR
+# 패킷 pack / unpack : 클라이언트 요청 및 서버 응답 전체 11종
 #   - pack_xxx(...)   : 값 -> 전송할 바이트 (헤더 + 본문)
 #   - unpack_xxx(payload) : 본문 바이트 -> 값  (헤더는 unpack_header 로 먼저 읽은 뒤 본문만 넘긴다)
 # =====================================================================
@@ -109,6 +109,111 @@ def unpack_lobby_state(payload):
     _check_len("StoC_LOBBY_STATE", payload, 1)
     (waiting_count,) = struct.unpack(BYTE_ORDER + 'B', payload)
     return waiting_count
+
+
+# ---- 103  StoC_GAME_START : 제한 시간, 가격표, 플레이어, 금괴 위치 --------
+def pack_game_start(time_limit, costs, players, golds):
+    payload = struct.pack(BYTE_ORDER + 'H4H', time_limit, *costs)
+    for player in players:
+        payload += struct.pack(BYTE_ORDER + 'Bhh', *player)
+    _check_len("StoC_GAME_START", payload, 25)
+    payload += struct.pack(BYTE_ORDER + 'B', len(golds))
+    for gold in golds:
+        payload += struct.pack(BYTE_ORDER + 'Bhh', *gold)
+    return _make_packet("StoC_GAME_START", payload)
+
+
+def unpack_game_start(payload):
+    _check_len("StoC_GAME_START", payload[:26], 26)    # count 를 읽을 고정 부분 확인
+    gold_count = payload[25]
+    _check_len("StoC_GAME_START", payload, 26 + 5 * gold_count)
+    (time_limit,) = struct.unpack(BYTE_ORDER + 'H', payload[:2])
+    costs = struct.unpack(BYTE_ORDER + '4H', payload[2:10])
+    players = [struct.unpack(BYTE_ORDER + 'Bhh', payload[10 + 5 * i:15 + 5 * i])
+               for i in range(3)]
+    golds = [struct.unpack(BYTE_ORDER + 'Bhh', payload[26 + 5 * i:31 + 5 * i])
+             for i in range(gold_count)]
+    return time_limit, costs, players, golds
+
+
+# ---- 104  StoC_STATE : 남은 시간, 팀 금괴, 등급, 플레이어 상태 -----------
+# dir : 0 아래 / 1 왼쪽 / 2 오른쪽 / 3 위
+# state : 0 대기 / 1 이동 / 2 채굴
+def pack_state(remain_x10, team_gold, item_level, players):
+    payload = struct.pack(BYTE_ORDER + 'HHB', remain_x10, team_gold, item_level)
+    for player in players:
+        payload += struct.pack(BYTE_ORDER + 'BhhBB', *player)
+    _check_len("StoC_STATE", payload, 26)
+    return _make_packet("StoC_STATE", payload)
+
+
+def unpack_state(payload):
+    _check_len("StoC_STATE", payload, 26)
+    remain_x10, team_gold, item_level = struct.unpack(BYTE_ORDER + 'HHB', payload[:5])
+    players = [struct.unpack(BYTE_ORDER + 'BhhBB', payload[5 + 7 * i:12 + 7 * i])
+               for i in range(3)]
+    return remain_x10, team_gold, item_level, players
+
+
+# ---- 105  StoC_GOLD_MINED : 채굴 완료 (spot_id u8, player_id u8, team_gold u16) ----
+def pack_gold_mined(spot_id, player_id, team_gold):
+    payload = struct.pack(BYTE_ORDER + 'BBH', spot_id, player_id, team_gold)
+    return _make_packet("StoC_GOLD_MINED", payload)
+
+
+def unpack_gold_mined(payload):
+    _check_len("StoC_GOLD_MINED", payload, 4)
+    spot_id, player_id, team_gold = struct.unpack(BYTE_ORDER + 'BBH', payload)
+    return spot_id, player_id, team_gold
+
+
+# ---- 106  StoC_GOLD_RESPAWN : 금괴 재생성 (count u8, golds[count]) -------
+# golds : (spot_id u8, x i16, y i16) 목록
+def pack_gold_respawn(golds):
+    payload = struct.pack(BYTE_ORDER + 'B', len(golds))
+    for gold in golds:
+        payload += struct.pack(BYTE_ORDER + 'Bhh', *gold)
+    return _make_packet("StoC_GOLD_RESPAWN", payload)
+
+
+def unpack_gold_respawn(payload):
+    _check_len("StoC_GOLD_RESPAWN", payload[:1], 1)
+    count = payload[0]
+    _check_len("StoC_GOLD_RESPAWN", payload, 1 + 5 * count)
+    golds = [struct.unpack(BYTE_ORDER + 'Bhh', payload[1 + 5 * i:6 + 5 * i])
+             for i in range(count)]
+    return golds
+
+
+# ---- 107  StoC_SHOP_RESULT : 구매 결과 (result u8, item_id u8, item_level u8, team_gold u16) ----
+# result : 0 성공 / 1 금괴 부족 / 2 현재 등급 이하 / 3 잘못된 번호
+def pack_shop_result(result, item_id, item_level, team_gold):
+    payload = struct.pack(BYTE_ORDER + 'BBBH', result, item_id, item_level, team_gold)
+    return _make_packet("StoC_SHOP_RESULT", payload)
+
+
+def unpack_shop_result(payload):
+    _check_len("StoC_SHOP_RESULT", payload, 5)
+    result, item_id, item_level, team_gold = struct.unpack(BYTE_ORDER + 'BBBH', payload)
+    return result, item_id, item_level, team_gold
+
+
+# ---- 108  StoC_GAME_END : 종료 (final_gold u16, players[3]) -------------
+# mined 는 개인별 채굴 수
+def pack_game_end(final_gold, players):
+    payload = struct.pack(BYTE_ORDER + 'H', final_gold)
+    for player in players:
+        payload += struct.pack(BYTE_ORDER + 'BH', *player)
+    _check_len("StoC_GAME_END", payload, 11)
+    return _make_packet("StoC_GAME_END", payload)
+
+
+def unpack_game_end(payload):
+    _check_len("StoC_GAME_END", payload, 11)
+    (final_gold,) = struct.unpack(BYTE_ORDER + 'H', payload[:2])
+    players = [struct.unpack(BYTE_ORDER + 'BH', payload[2 + 3 * i:5 + 3 * i])
+               for i in range(3)]
+    return final_gold, players
 
 
 # ---- 109  StoC_ERROR : 에러 사유 (reason u8) -----------------------------
