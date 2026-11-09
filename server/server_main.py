@@ -1,16 +1,25 @@
-import os
-import sys
-sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
-from common import protocol
+import socket
 
-# test
+from common.constants import PORT
+from server.session import ClientSession
+
+#'0.0.0.0' = INADDR_ANY
+def main(host='0.0.0.0', port=PORT):
+    sessions = []
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_sock:
+        server_sock.bind((host, port))
+        server_sock.listen()
+
+        try:
+            while True:
+                client_sock, _ = server_sock.accept()
+                sessions.append(ClientSession(client_sock))
+        finally:
+            # 예외로 루프가 끝나도 연결 소켓을 정리한다
+            for session in sessions:
+                session.close()
+
+
 if __name__ == '__main__':
-    # 테스트
-    packet_type = protocol.packet_types["CtoS_INPUT"]
-    payload_length = 10
-    header = protocol.pack_header(packet_type, payload_length)
-    print("Packed Header:", header)
-
-    unpacked_type, unpacked_length = protocol.unpack_header(header)
-    print("Unpacked Type:", unpacked_type)
-    print("Unpacked Length:", unpacked_length)
+    main()
