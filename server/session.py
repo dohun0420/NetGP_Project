@@ -28,6 +28,11 @@ class ClientSession:
         self._close_lock = threading.Lock()
         self._thread = None
 
+    def is_closed(self):
+        """세션이 닫혀있는지 상태 확인"""
+        with self._close_lock:
+            return self._closed
+
     def start(self):
         # EV_JOIN 을 큐에 넣고 수신 스레드를 시작한다. (accept 직후 한 번 호출)
         self.event_queue.put((EV_JOIN, self))
@@ -38,7 +43,7 @@ class ClientSession:
         # 수신 스레드 : recv() -> PacketBuffer 로 조립 -> 패킷마다 EV_PACKET 을 큐에 넣는다.
         buffer = PacketBuffer()
         try:
-            while not self._closed:
+            while not self.is_closed():
                 try:
                     data = self.sock.recv(4096)
                 except socket.timeout:
@@ -68,8 +73,14 @@ class ClientSession:
             if self._closed:
                 return
             self._closed = True
+
+        # 소켓 종료 처리 시 OS별 OSError 방지
         try:
             self.sock.shutdown(socket.SHUT_RDWR)    # 블록된 recv() 를 깨운다
         except OSError:
             pass
-        self.sock.close()
+
+        try:
+            self.sock.close()
+        except OSError:
+            pass
