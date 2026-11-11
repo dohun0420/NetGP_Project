@@ -14,9 +14,10 @@ from common.net_utils import PacketBuffer, send_packet
 EV_JOIN = 'join'
 EV_PACKET = 'packet'
 EV_LEAVE = 'leave'
-from common.net_utils import send_packet
+
 
 class ClientSession:
+
     def __init__(self, sock, event_queue):
         self.sock = sock
         self.event_queue = event_queue
@@ -27,21 +28,18 @@ class ClientSession:
         self._close_lock = threading.Lock()
         self._thread = None
 
-    def is_closed(self):
-        with self._close_lock:
-            return self._closed
-
     def start(self):
-        # EV_JOIN 을 큐에 넣고 수신 스레드를 시작한다. (accept 직후 한 번 호출)
+        """EV_JOIN 을 큐에 넣고 수신 스레드를 시작한다. (accept 직후 한 번 호출)"""
         self.event_queue.put((EV_JOIN, self))
         self._thread = threading.Thread(target=self.recv_loop, daemon=True)
         self._thread.start()
 
     def recv_loop(self):
-        # 수신 스레드 : recv() -> PacketBuffer 로 조립 -> 패킷마다 EV_PACKET 을 큐에 넣는다.
+        """수신 스레드 : recv() -> PacketBuffer 로 조립 -> 패킷마다 EV_PACKET 을 큐에 넣는다.
+        게임 상태에는 접근하지 않는다."""
         buffer = PacketBuffer()
         try:
-            while not self.is_closed():
+            while not self._closed:
                 try:
                     data = self.sock.recv(4096)
                 except socket.timeout:
@@ -58,7 +56,7 @@ class ClientSession:
             self.event_queue.put((EV_LEAVE, self))   # 수신 스레드가 끝날 때 딱 한 번만 넣는다
 
     def send(self, packet):
-        # 게임 루프 스레드가 호출한다. 실패하면 연결을 닫는다 -> 수신 스레드가 EV_LEAVE 를 넣는다.
+        """게임 루프 스레드가 호출한다. 실패하면 연결을 닫는다 -> 수신 스레드가 EV_LEAVE 를 넣는다."""
         try:
             send_packet(self.sock, packet)
             return True
@@ -71,25 +69,8 @@ class ClientSession:
             if self._closed:
                 return
             self._closed = True
-
-        # 소켓 종료 처리 시 OS별 OSError 방지
         try:
             self.sock.shutdown(socket.SHUT_RDWR)    # 블록된 recv() 를 깨운다
         except OSError:
             pass
-
-        try:
-            self.sock.close()
-        except OSError:
-            pass
-          
-    def __init__(self, sock):
-        self.sock = sock
-        # 송신이 오래 막히지 않도록 제한한다. 추후 recv()에도 같은 제한이 적용된다.
-        self.sock.settimeout(2.0)
-
-    def send(self, packet):
-        send_packet(self.sock, packet)
-
-    def close(self):
         self.sock.close()
