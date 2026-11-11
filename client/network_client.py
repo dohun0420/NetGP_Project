@@ -97,6 +97,15 @@ class NetworkClient:
             self._shutdown_socket()     # 수신 스레드가 끊김을 감지해 DISCONNECTED 를 넣는다
             return False
 
+    def send_input(self, key_flags):
+        # 눌린 키 상태를 서버로 보낸다. key_flags : protocol.KEY_W | KEY_A | KEY_S | KEY_D | KEY_SPACE 를 더한 값.
+        # (키가 바뀔 때만 / 0.5초마다 호출하는 규칙은 PlayState 에서 정한다)
+        return self.send(protocol.pack_input(key_flags))
+
+    def send_shop_buy(self, item_id):
+        # 상점에서 아이템 구매를 요청한다. item_id : protocol.ITEM_GLOVE ~ ITEM_DRILL (1~4).
+        return self.send(protocol.pack_shop_buy(item_id))
+
     def close(self):
         # 내가 직접 연결을 끊는다. (DISCONNECTED 메시지는 넣지 않는다)
         self.running = False
