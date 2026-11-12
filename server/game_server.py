@@ -3,7 +3,7 @@ import time
 
 from common import protocol
 from common.constants import TICK_RATE
-from server.session import EV_JOIN, EV_PACKET, EV_LEAVE
+from server.session import EV_JOIN, EV_PACKET, EV_LEAVE, ClientSession
 
 
 class GameServer:
@@ -14,7 +14,7 @@ class GameServer:
         self.event_queue = event_queue
         self.sessions = []                  # 접속 중인 세션 (게임 루프 스레드만 수정한다)
         self.running = False
-        # 패킷 종류 -> 처리 함수. 새 패킷을 처리하는 함수를 만들면 여기에 한 줄 추가한다.
+        # 패킷 종류 -> 처리 함수. 새 패킷을 처리하는 함수를 만들면 여기에 한 줄 추가한다. 서버가 처리하니 Ctos_ 패킷만 들어간다.
         self.packet_handlers = {
             protocol.packet_types["CtoS_INPUT"]: self.handle_input,
             protocol.packet_types["CtoS_SHOP_BUY"]: self.handle_shop_buy,
@@ -62,8 +62,19 @@ class GameServer:
                 self.handle_leave(event[1])
 
     def handle_join(self, session):
+        player_count = len(self.sessions)
+        if player_count >= 3:            # 최대 3명까지만 허용
+            packet = protocol.pack_lobby_state(player_count)   # 3명 이상이면 접속 거부
+            session.send(packet)                # 최대 인원 수용시 자동 시작 따라서 진행중 상태를 알려주고 접속 종료
+            session.close()
+            return
+        session.player_id = player_count      # 0~2
+        packet = protocol.pack_join_ok(session.player_id)
+        session.send(packet)
         self.sessions.append(session)
         # TODO(11/12) 번호(색상) 배정, JOIN_OK / ERROR(가득 참 · 게임 진행 중) 전송
+
+
 
     def handle_leave(self, session):
         if session in self.sessions:
@@ -88,7 +99,6 @@ class GameServer:
     def handle_shop_buy(self, session, payload):
         item_id = protocol.unpack_shop_buy(payload)
         # TODO(11/27) handle_shop_buy : 검증 -> SHOP_RESULT 전송
-
     # ------------------------------------------------------------ 매 틱 처리 (이후 채워 나간다)
     def update(self, dt):
         pass                                # TODO(11/16) World.update(dt)
