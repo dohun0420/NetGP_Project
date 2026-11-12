@@ -2,6 +2,8 @@ import queue
 import socket
 import threading
 
+import os, sys
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from common.constants import PORT
 from server.game_server import GameServer
 from server.session import ClientSession

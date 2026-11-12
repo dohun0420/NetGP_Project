@@ -1,7 +1,10 @@
 import queue
 import socket
 import threading
+import os
+import sys
 
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from common import protocol
 from common.constants import PORT
 from common.net_utils import PacketBuffer, send_packet
@@ -19,7 +22,11 @@ DECODERS = {
     protocol.packet_types["StoC_LOBBY_STATE"]: protocol.unpack_lobby_state,
     protocol.packet_types["StoC_ERROR"]: protocol.unpack_error,
 }
+# 현재 statemachine이 없는 관계로 title을 여기서 처리
 
+def title():
+    ip = sys.argv[1]
+    return ip
 
 class NetworkClient:
 
@@ -122,3 +129,16 @@ class NetworkClient:
             self.sock.close()
         except OSError:
             pass
+if __name__ == "__main__":
+    # 단독 실행하면 서버 접속 테스트
+    client = NetworkClient()
+    if client.connect(title(), PORT):
+        print("서버 접속 성공")
+        while True:
+            msgs = client.poll()
+            for name, value in msgs:
+                print(name, value)
+            if not client.running:
+                break
+    else:
+        print(client.last_error)

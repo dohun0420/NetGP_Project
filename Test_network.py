@@ -1,10 +1,10 @@
 # 11/10 작업 검증 : ClientSession.recv_loop() + 이벤트 큐 + NetworkClient
 # 실행 (프로젝트 최상위 폴더에서) :  python test_network.py
 import queue, socket, threading, time
-
+import sys
 from common import protocol as p
 from server.session import ClientSession, EV_JOIN, EV_PACKET, EV_LEAVE
-from client.network_client import NetworkClient, DISCONNECTED
+from client.network_client import NetworkClient, DISCONNECTED, title
 
 def free_port():
     with socket.socket() as s:
@@ -26,7 +26,12 @@ def wait_messages(client, count, timeout=2.0):
 # ----------------------------------------------------------------- 서버 시작
 # 세션/클라이언트만 검사하므로 게임 루프 없이 accept 만 하는 간단한 서버를 쓴다. (이벤트가 큐에 그대로 남는다)
 events = queue.Queue()
-listener = socket.socket(); listener.bind(("127.0.0.1", 0)); listener.listen()
+# cmd 에서 python test_network.py 127.0.0.1 이런식으로 입력
+if len(sys.argv) > 1:
+    ip = title()
+else:
+    ip = "127.0.0.1"
+listener = socket.socket(); listener.bind((ip, 0)); listener.listen()
 port = listener.getsockname()[1]
 def accept_loop():
     while True:
@@ -119,5 +124,7 @@ for _ in range(3):
 assert sorted(seen.values()) == [1, 2, 3] and all(seen[s] == i + 1 for i, (c, s) in enumerate(clients))
 for c, s in clients: c.close()
 print("10) 3명 동시 접속 OK : 각 세션의 패킷이 섞이지 않음")
+
+
 
 print("\n전부 통과")
