@@ -51,7 +51,21 @@ class NetworkClient:
         self._thread = threading.Thread(target=self.recv_loop, daemon=True)
         self._thread.start()
         return True
-
+    def connect_udp(self, port=PORT):
+        # UDP 서버에 접속하고 수신 스레드를 시작한다. 성공 True / 실패 False (사유는 last_error).
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            # sock.connect((ip, port))
+            sock.bind(('', port))
+        except OSError as e:
+            self.last_error = f'UDP 서버에 접속할 수 없습니다. ({e})'
+            return False
+        sock.settimeout(0.5)            # recv 가 0.5초마다 깨어나 종료 요청(running)을 확인한다
+        self.sock = sock
+        self.running = True
+        self._thread = threading.Thread(target=self.recv_loop_udp, daemon=True)
+        self._thread.start()
+        return True
     def recv_loop(self):
         # 수신 스레드 : recv() -> PacketBuffer 로 조립 -> 값으로 해석해서 inbox 에 넣는다.
         buffer = PacketBuffer()
@@ -59,6 +73,27 @@ class NetworkClient:
             while self.running:
                 try:
                     data = self.sock.recv(4096)
+                except socket.timeout:
+                    continue
+                if not data:
+                    break               # 서버가 연결을 닫았다
+                for packet in buffer.feed(data):
+                    self._dispatch(packet)
+        except (OSError, ValueError):
+            pass                        # 연결 끊김 또는 잘못된 패킷
+        finally:
+            was_running = self.running
+            self.running = False
+            self._shutdown_socket()
+            if was_running:             # 내가 close() 한 경우가 아니라 서버/네트워크 때문에 끊긴 경우만 알린다
+                self.inbox.put((DISCONNECTED, '서버와의 연결이 끊어졌습니다.'))
+    def recv_loop_udp(self):
+        # 수신 스레드 : recv() -> PacketBuffer 로 조립 -> 값으로 해석해서 inbox 에 넣는다.
+        buffer = PacketBuffer()
+        try:
+            while self.running:
+                try:
+                    data, addr = self.sock.recvfrom(4096)
                 except socket.timeout:
                     continue
                 if not data:
@@ -132,7 +167,7 @@ class NetworkClient:
 if __name__ == "__main__":
     # 단독 실행하면 서버 접속 테스트
     client = NetworkClient()
-    if client.connect(title(), PORT):
+    if client.connect(title(), PORT) and client.connect_udp(PORT-1):
         print("서버 접속 성공")
         while True:
             msgs = client.poll()
