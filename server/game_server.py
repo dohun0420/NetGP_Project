@@ -79,6 +79,7 @@ class GameServer:
         session.send(packet)
         self.sessions.append(session)
         self.broadcast_LobbyState()
+        self.start_game()
 
     def start_game(self):
         if self.game_started or len(self.sessions) != 3:
