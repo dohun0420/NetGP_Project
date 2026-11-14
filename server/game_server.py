@@ -2,9 +2,10 @@ import queue
 import time
 
 from common import protocol
-from common.constants import TICK_RATE, PORT
+from common.constants import TICK_RATE, PORT, TIME_LIMIT
 from server.session import EV_JOIN, EV_PACKET, EV_LEAVE, ClientSession
 from common import net_utils
+from server.world import ITEM_TABLE
 
 
 class GameServer:
@@ -15,6 +16,7 @@ class GameServer:
         self.event_queue = event_queue
         self.sessions = []                  # 접속 중인 세션 (게임 루프 스레드만 수정한다)
         self.running = False
+        self.game_started = False          # GAME_START 중복 전송 방지
         self.udp_socket = udp_socket
         self.subnet_mask = None
         # 패킷 종류 -> 처리 함수. 새 패킷을 처리하는 함수를 만들면 여기에 한 줄 추가한다. 서버가 처리하니 Ctos_ 패킷만 들어간다.
@@ -77,8 +79,19 @@ class GameServer:
         session.send(packet)
         self.sessions.append(session)
         self.broadcast_LobbyState()
+        self.start_game()
 
-
+    def start_game(self):
+        if self.game_started or len(self.sessions) != 3:
+            return
+        costs = tuple(ITEM_TABLE[item_id]['cost'] for item_id in range(1, 5))
+        players = [(s.player_id, 400 + s.player_id * 100, 300) for s in self.sessions]
+        golds = []                          # TODO(11/15) generate_gold_spots() 결과 연결
+        gold_count = len(golds)
+        packet = protocol.pack_game_start(TIME_LIMIT, costs, players, gold_count, golds)
+        self.game_started = True
+        for session in self.sessions:
+            session.send(packet)
 
     def handle_leave(self, session):
         if session in self.sessions:

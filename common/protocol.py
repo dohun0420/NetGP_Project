@@ -111,13 +111,14 @@ def unpack_lobby_state(payload):
     return waiting_count
 
 
-# ---- 103  StoC_GAME_START : 제한 시간, 가격표, 플레이어, 금괴 위치 --------
-def pack_game_start(time_limit, costs, players, golds):
+
+# ---- 103  StoC_GAME_START : 제한 시간, 가격표, 플레이어, 금괴 개수, 금괴 위치 --------
+def pack_game_start(time_limit, costs, players, gold_count, golds):
     payload = struct.pack(BYTE_ORDER + 'H4H', time_limit, *costs)
     for player in players:
         payload += struct.pack(BYTE_ORDER + 'Bhh', *player)
     _check_len("StoC_GAME_START", payload, 25)
-    payload += struct.pack(BYTE_ORDER + 'B', len(golds))
+    payload += struct.pack(BYTE_ORDER + 'B', gold_count)
     for gold in golds:
         payload += struct.pack(BYTE_ORDER + 'Bhh', *gold)
     return _make_packet("StoC_GAME_START", payload)
@@ -125,15 +126,15 @@ def pack_game_start(time_limit, costs, players, golds):
 
 def unpack_game_start(payload):
     _check_len("StoC_GAME_START", payload[:26], 26)    # count 를 읽을 고정 부분 확인
-    gold_count = payload[25]
-    _check_len("StoC_GAME_START", payload, 26 + 5 * gold_count)
     (time_limit,) = struct.unpack(BYTE_ORDER + 'H', payload[:2])
     costs = struct.unpack(BYTE_ORDER + '4H', payload[2:10])
     players = [struct.unpack(BYTE_ORDER + 'Bhh', payload[10 + 5 * i:15 + 5 * i])
                for i in range(3)]
+    (gold_count,) = struct.unpack(BYTE_ORDER + 'B', payload[25:26])
+    _check_len("StoC_GAME_START", payload, 26 + 5 * gold_count)
     golds = [struct.unpack(BYTE_ORDER + 'Bhh', payload[26 + 5 * i:31 + 5 * i])
              for i in range(gold_count)]
-    return time_limit, costs, players, golds
+    return time_limit, costs, players, gold_count, golds
 
 
 # ---- 104  StoC_STATE : 남은 시간, 팀 금괴, 등급, 플레이어 상태 -----------
