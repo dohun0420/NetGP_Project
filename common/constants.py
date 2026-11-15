@@ -14,6 +14,9 @@ TICK_RATE = 1 / 20
 # 게임 제한 시간 (초)
 TIME_LIMIT = 180
 
+# 채굴지점 개수
+GOLD_SPOT_COUNT = 20
+
 # 아이템 별 채굴 시간 (초)
 DIG_TIME = {
     'hand': 5,

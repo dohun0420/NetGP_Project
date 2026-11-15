@@ -1,12 +1,15 @@
 import queue
 import time
 
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+
 from common import protocol
 from common.constants import TICK_RATE, PORT, TIME_LIMIT
 from server.session import EV_JOIN, EV_PACKET, EV_LEAVE, ClientSession
 from common import net_utils
-from server.world import ITEM_TABLE
-
+from gold_spawner import generate_gold_spots
 
 class GameServer:
     # 게임 루프(20Hz). run() 은 게임 상태를 수정하는 유일한 스레드에서 돈다.
@@ -18,7 +21,6 @@ class GameServer:
         self.running = False
         self.game_started = False          # GAME_START 중복 전송 방지
         self.udp_socket = udp_socket
-        self.subnet_mask = None
         # 패킷 종류 -> 처리 함수. 새 패킷을 처리하는 함수를 만들면 여기에 한 줄 추가한다. 서버가 처리하니 Ctos_ 패킷만 들어간다.
         self.packet_handlers = {
             protocol.packet_types["CtoS_INPUT"]: self.handle_input,
@@ -86,12 +88,14 @@ class GameServer:
             return
         costs = tuple(ITEM_TABLE[item_id]['cost'] for item_id in range(1, 5))
         players = [(s.player_id, 400 + s.player_id * 100, 300) for s in self.sessions]
-        golds = []                          # TODO(11/15) generate_gold_spots() 결과 연결
+        golds = generate_gold_spots()
         gold_count = len(golds)
         packet = protocol.pack_game_start(TIME_LIMIT, costs, players, gold_count, golds)
         self.game_started = True
         for session in self.sessions:
             session.send(packet)
+        # 동작 확인을 위해 print
+        print(f"GAME_START sent to {len(self.sessions)} players: costs={costs}, gold_count={gold_count}, golds={golds}")
 
     def handle_leave(self, session):
         if session in self.sessions:
@@ -116,8 +120,6 @@ class GameServer:
     def handle_shop_buy(self, session, payload):
         item_id = protocol.unpack_shop_buy(payload)
         # TODO(11/27) handle_shop_buy : 검증 -> SHOP_RESULT 전송
-    def subnet_mask(self, subnet_mask):
-        self.subnet_mask = subnet_mask
     def broadcast_LobbyState(self):
         # 대기 인원수를 모든 세션에 전송한다. (게임 시작 전 로비 상태)
         waiting_count = len(self.sessions)
