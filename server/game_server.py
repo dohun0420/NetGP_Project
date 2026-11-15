@@ -8,6 +8,7 @@ sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from common import protocol
 from common.constants import TICK_RATE, PORT, TIME_LIMIT
 from server.session import EV_JOIN, EV_PACKET, EV_LEAVE, ClientSession
+from server.world import ITEM_TABLE
 from common import net_utils
 from gold_spawner import generate_gold_spots
 
