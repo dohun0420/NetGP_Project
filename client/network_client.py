@@ -25,7 +25,10 @@ DECODERS = {
 # 현재 statemachine이 없는 관계로 title을 여기서 처리
 
 def title():
-    ip = sys.argv[1]
+    if len(sys.argv) < 2:
+        ip = '127.0.0.1'
+    else:
+        ip = sys.argv[1]
     return ip
 
 class NetworkClient:
@@ -138,6 +141,21 @@ class NetworkClient:
         except OSError:
             self._shutdown_socket()     # 수신 스레드가 끊김을 감지해 DISCONNECTED 를 넣는다
             return False
+    def keys_to_flags(self, keys, key_flags=0):
+        # 키보드 입력 문자열을 key_flags 값으로 바꾼다. (PlayState 에서 호출)
+        # PlayState 에서 매 keydown/keyup 마다 keys_to_flags() 를 호출해 key_flags 를 만든다
+        flags = key_flags
+        if 'w' in keys:
+            flags |= protocol.KEY_W
+        if 'a' in keys:
+            flags |= protocol.KEY_A
+        if 's' in keys:
+            flags |= protocol.KEY_S
+        if 'd' in keys:
+            flags |= protocol.KEY_D
+        if 'space' in keys:
+            flags |= protocol.KEY_SPACE
+        return flags
 
     def send_input(self, key_flags):
         # 눌린 키 상태를 서버로 보낸다. key_flags : protocol.KEY_W | KEY_A | KEY_S | KEY_D | KEY_SPACE 를 더한 값.
@@ -166,6 +184,11 @@ class NetworkClient:
             pass
 if __name__ == "__main__":
     # 단독 실행하면 서버 접속 테스트
+    # keys_to_flags()실험 임의의 keys 값을 준다
+    keys = ['w', 'd', 'space']
+    flags = NetworkClient.keys_to_flags(NetworkClient, keys)
+    print(flags)
+    # 서버 접속 테스트
     client = NetworkClient()
     if client.connect(title(), PORT) and client.connect_udp(PORT-1):
         print("서버 접속 성공")
