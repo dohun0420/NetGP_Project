@@ -1,13 +1,25 @@
 from pico2d import *
-from sdl2 import SDL_KEYDOWN, SDLK_d, SDLK_a, SDLK_w, SDLK_s, SDL_KEYUP
+from sdl2 import (
+    SDL_GetError, SDL_KEYDOWN, SDLK_d, SDLK_a, SDLK_w, SDLK_s, SDL_KEYUP,
+    SDL_SetTextureColorMod,
+)
+
+# 서버의 player_id에 대응하는 색상: 0 빨강 / 1 파랑 / 2 초록
+PLAYER_COLORS = ((255, 70, 70), (40, 50, 255), (70, 255, 70))
 
 class Player:
-    def __init__(self):
+    def __init__(self, player_id=0):
+        if player_id not in (0, 1, 2):
+            raise ValueError('player_id는 0, 1, 2 중 하나여야 합니다.')
+        self.player_id = player_id
         self.x, self.y = 400, 300
         self.frame = 0
         self.dir_x = 0
         self.dir_y = 0
+        # 플레이어마다 별도 이미지를 로딩해 자신의 색상만 적용한다.
         self.image = load_image('Player.png')
+        if SDL_SetTextureColorMod(self.image.texture, *PLAYER_COLORS[player_id]) != 0:
+            raise RuntimeError('색상 적용 실패: ' + SDL_GetError().decode('utf-8'))
         self.state = 's'
         self.frame_timer = 0
         self.is_stopped = False
