@@ -24,6 +24,8 @@ class Player:
         self.state = 0                 # 0 대기 / 1 이동 / 2 채굴
         self.key_flags = 0
         self.mined = 0                 # 개인별 채굴 수
+    def move(self, dt):
+        pass
 
 class GoldSpot:
     def __init__(self, spot_id, x, y):
@@ -76,6 +78,43 @@ def apply_input(players, input_data):
             # 맵 경계 처리
             player.x = max(0, min(constants.WIDTH, player.x))
             player.y = max(0, min(constants.HEIGHT, player.y))
+
+
+class World:
+    def __init__(self):
+        self.players = {}              # player_id -> Player
+        self.golds = {}                # spot_id -> GoldSpot
+        self.team_gold = 0
+        self.item_level = 0
+        self.remain = float(constants.TIME_LIMIT)
+        self.ended = False
+
+    def update(self, dt):
+        # 게임 시작 후 GameServer가 매 틱 호출한다.
+        if dt <= 0 or self.ended:
+            return
+        dt = min(dt, max(0.0, self.remain))
+
+        # 1. 플레이어 이동: 저장된 입력으로 이동하고 맵 경계를 보정한다.
+        for player in self.players.values():
+            if dt > 0:
+                player.move(dt)
+
+        # 2. 채굴 시도
+        # TODO(11/22): try_start_mining() 연결
+        # TODO(11/23): update_mining(dt) 연결 인듯 하지만 채굴진행도를 따로 저장하지 않기에 삭제해야 할듯?
+
+        # 3. 채굴 완료 판정: 금괴 제거, 팀 금괴/개인 채굴 수 갱신, GOLD_MINED 이벤트 생성.
+        # TODO(11/24): complete_mining() 연결
+
+        # 4. 금괴가 모두 없어지면 재생성하고 GOLD_RESPAWN 이벤트를 생성한다.
+        # TODO(11/25): respawn_gold_if_empty() 연결
+
+        # 5. 타이머 갱신과 종료 판정. 상점이 열려 있어도 시간은 흐른다.
+        self.remain = max(0.0, self.remain - dt)
+        if self.remain <= 0:
+            self.ended = True
+            # TODO(11/29): calc_result()로 최종 팀 금괴/개인 기여도 집계
 
 
 
