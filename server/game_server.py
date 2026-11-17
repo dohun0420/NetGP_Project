@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from common import protocol
 from common.constants import TICK_RATE, PORT, TIME_LIMIT
 from server.session import EV_JOIN, EV_PACKET, EV_LEAVE, ClientSession
-from server.world import ITEM_TABLE
+from server.world import ITEM_TABLE, World, Player, GoldSpot
 from common import net_utils
 from gold_spawner import generate_gold_spots
 
@@ -22,6 +22,7 @@ class GameServer:
         self.running = False
         self.game_started = False          # GAME_START 중복 전송 방지
         self.udp_socket = udp_socket
+        self.world = None                   # [11/17] 게임 시작 때 만들어진다 (start_game)
         # 패킷 종류 -> 처리 함수. 새 패킷을 처리하는 함수를 만들면 여기에 한 줄 추가한다. 서버가 처리하니 Ctos_ 패킷만 들어간다.
         self.packet_handlers = {
             protocol.packet_types["CtoS_INPUT"]: self.handle_input,
@@ -93,6 +94,12 @@ class GameServer:
         gold_count = len(golds)
         packet = protocol.pack_game_start(TIME_LIMIT, costs, players, gold_count, golds)
         self.game_started = True
+        # [11/17] 서버가 관리할 게임 데이터 생성. GAME_START 로 보낸 위치와 같은 값으로 시작한다.
+        self.world = World()
+        for player_id, x, y in players:
+            self.world.players[player_id] = Player(player_id, x, y)
+        for spot_id, x, y in golds:
+            self.world.golds[spot_id] = GoldSpot(spot_id, x, y)
         for session in self.sessions:
             session.send(packet)
         # 동작 확인을 위해 print
@@ -129,7 +136,13 @@ class GameServer:
         self.udp_socket.sendto(packet, address)
     # ------------------------------------------------------------ 매 틱 처리 (이후 채워 나간다)
     def update(self, dt):
-        pass                                # TODO(11/16) World.update(dt)
+        if self.world is not None:          # 게임 시작 후에만 월드를 진행시킨다 (타이머 감소 · 이동)
+            self.world.update(dt)
 
     def broadcast(self):
-        pass                                # TODO(11/17) STATE 를 모든 세션에 전송
+        # [11/17] 게임 중 매 틱(20Hz) 현재 상태를 접속 중인 모든 세션에 보낸다.
+        if self.world is None:              # 게임 시작 전(로비)에는 STATE 를 보내지 않는다
+            return
+        packet = protocol.pack_state(*self.world.snapshot())    # 같은 패킷을 모두에게 보낸다
+        for session in list(self.sessions):                     # 전송 실패 시 세션이 닫힐 수 있어 복사본으로 순회
+            session.send(packet)

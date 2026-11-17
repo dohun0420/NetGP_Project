@@ -117,6 +117,14 @@ class World:
             # TODO(11/29): calc_result()로 최종 팀 금괴/개인 기여도 집계
 
 
+    def snapshot(self):
+        # [11/17] STATE 패킷에 넣을 값을 만든다. protocol.pack_state(*world.snapshot()) 로 바로 쓴다.
+        # 반환 : (remain_x10, team_gold, item_level, players)  players = [(player_id, x, y, dir, state), ...]
+        remain_x10 = max(0, min(65535, round(self.remain * 10)))      # 남은 시간 (0.1초 단위)
+        players = [(player.player_id, int(player.x), int(player.y), player.dir, player.state)
+                   for _, player in sorted(self.players.items())]     # player_id 순서로 고정
+        return remain_x10, self.team_gold, self.item_level, players
+
 
 if __name__ == "__main__":
     # 테스트용 코드
