@@ -23,6 +23,7 @@ class GameServer:
         self.game_started = False          # GAME_START 중복 전송 방지
         self.udp_socket = udp_socket
         self.world = None                   # [11/17] 게임 시작 때 만들어진다 (start_game)
+        self.input_datas = {}                  # [11/19] 플레이어별 입력 상태를 저장한다. player_id -> key_flags
         # 패킷 종류 -> 처리 함수. 새 패킷을 처리하는 함수를 만들면 여기에 한 줄 추가한다. 서버가 처리하니 Ctos_ 패킷만 들어간다.
         self.packet_handlers = {
             protocol.packet_types["CtoS_INPUT"]: self.handle_input,
@@ -41,7 +42,7 @@ class GameServer:
             last = now
 
             self.process_events()
-            self.update(dt)
+            self.update(dt, self.input_datas)
             self.broadcast()
 
             # sleep 보정 : "처리 시간 + sleep" 이 항상 TICK_RATE 가 되도록 다음 틱 시각을 기준으로 잔다.
@@ -86,6 +87,8 @@ class GameServer:
         self.start_game()
 
     def start_game(self):
+        for _ in self.input_datas.items():
+            self.input_datas[session.player_id] = 0
         if self.game_started or len(self.sessions) != 3:
             return
         costs = tuple(ITEM_TABLE[item_id]['cost'] for item_id in range(1, 5))
@@ -120,10 +123,9 @@ class GameServer:
             handler(session, payload)
         except ValueError:                  # 본문 길이가 틀린 패킷
             session.close()
-
     def handle_input(self, session, payload):
         key_flags = protocol.unpack_input(payload)
-        # TODO(11/17) World.apply_input(session.player_id, key_flags)
+        self.input_datas[session.player_id] = key_flags
 
     def handle_shop_buy(self, session, payload):
         item_id = protocol.unpack_shop_buy(payload)
@@ -135,9 +137,9 @@ class GameServer:
         address = ('<broadcast>', PORT -1)  # 브로드캐스트 주소와 포트 설정
         self.udp_socket.sendto(packet, address)
     # ------------------------------------------------------------ 매 틱 처리 (이후 채워 나간다)
-    def update(self, dt):
+    def update(self, dt, input_datas):
         if self.world is not None:          # 게임 시작 후에만 월드를 진행시킨다 (타이머 감소 · 이동)
-            self.world.update(dt)
+            self.world.update(dt, input_datas)
 
     def broadcast(self):
         # [11/17] 게임 중 매 틱(20Hz) 현재 상태를 접속 중인 모든 세션에 보낸다.
