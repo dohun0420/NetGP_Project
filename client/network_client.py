@@ -3,7 +3,7 @@ import socket
 import threading
 import os
 import sys
-
+from pico2d import *
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from common import protocol
 from common.constants import PORT
@@ -39,6 +39,7 @@ class NetworkClient:
         self.running = False
         self.last_error = ''
         self._thread = None
+        self.keys = set()  # 눌린 키 상태를 저장하는 집합
 
     def connect(self, ip, port=PORT):
         # 서버에 접속하고 수신 스레드를 시작한다. 성공 True / 실패 False (사유는 last_error).
@@ -155,13 +156,49 @@ class NetworkClient:
             flags |= protocol.KEY_D
         if 'space' in keys:
             flags |= protocol.KEY_SPACE
+        if 'p' in keys:
+            flags |= protocol.KEY_P
         return flags
 
     def send_input(self, key_flags):
         # 눌린 키 상태를 서버로 보낸다. key_flags : protocol.KEY_W | KEY_A | KEY_S | KEY_D | KEY_SPACE 를 더한 값.
         # (키가 바뀔 때만 / 0.5초마다 호출하는 규칙은 PlayState 에서 정한다)
         return self.send(protocol.pack_input(key_flags))
-
+    def play_state(self):
+        events = get_events()
+        for event in events:
+            if event.type == SDL_KEYDOWN:
+                if event.key == SDLK_w:
+                    self.keys.add('w')
+                elif event.key == SDLK_a:
+                    self.keys.add('a')
+                elif event.key == SDLK_s:
+                    self.keys.add('s')
+                elif event.key == SDLK_d:
+                    self.keys.add('d')
+                elif event.key == SDLK_p:      # 상점 진입 진입시 keys에서 p 를 제거하고 상점에서 벗어날때 다시 추가
+                    self.keys.add('p')
+                elif event.key == SDLK_SPACE:
+                    self.keys.add('space')
+                # p 값은 상점 으로의 진입 및 상점에서의 아이템 구매를 위한 키 입력 처리
+                # TODO 11/26 TRYBUY 하면서 구현
+            elif event.type == SDL_KEYUP:
+                if event.key == SDLK_w:
+                    self.keys.discard('w')
+                elif event.key == SDLK_a:
+                    self.keys.discard('a')
+                elif event.key == SDLK_s:
+                    self.keys.discard('s')
+                elif event.key == SDLK_d:
+                    self.keys.discard('d')
+                elif event.key == SDLK_SPACE:
+                    self.keys.discard('space')
+        # PlayState 에서 매 프레임 호출한다. (키보드 입력을 서버로 보낸다)
+        # keys_to_flags() 를 호출해 key_flags 를 만들고, send_input() 으로 서버에 보낸다.
+        key_flags = self.keys_to_flags(self.keys)
+        self.send_input(key_flags)
+        # 0.5초마다 키가 바뀌지 않아도 send_input(0) 을 보내야 한다.
+        pass
     def send_shop_buy(self, item_id):
         # 상점에서 아이템 구매를 요청한다. item_id : protocol.ITEM_GLOVE ~ ITEM_DRILL (1~4).
         return self.send(protocol.pack_shop_buy(item_id))
@@ -185,7 +222,8 @@ class NetworkClient:
 if __name__ == "__main__":
     # 단독 실행하면 서버 접속 테스트
     # keys_to_flags()실험 임의의 keys 값을 준다
-    keys = ['w', 'd', 'space']
+    # play_state()는 SDL 이벤트를 처리하므로 단독 실행에서는 호출하지 않는다.
+    keys = {'w', 'a', 'space'}
     flags = NetworkClient.keys_to_flags(NetworkClient, keys)
     print(flags)
     # 서버 접속 테스트

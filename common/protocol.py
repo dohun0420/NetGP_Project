@@ -49,7 +49,7 @@ KEY_A = 2
 KEY_S = 4
 KEY_D = 8
 KEY_SPACE = 16
-
+KEY_P = 32
 # CtoS_SHOP_BUY 의 item_id
 ITEM_GLOVE = 1
 ITEM_SHOVEL = 2
