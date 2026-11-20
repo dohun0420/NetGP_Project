@@ -3,6 +3,7 @@ import socket
 import threading
 import os
 import sys
+import time
 from pico2d import *
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from common import protocol
@@ -40,6 +41,7 @@ class NetworkClient:
         self.last_error = ''
         self._thread = None
         self.keys = set()  # 눌린 키 상태를 저장하는 집합
+        self.last_input_time = 0.0  # 마지막으로 send_input()을 호출한 시간
 
     def connect(self, ip, port=PORT):
         # 서버에 접속하고 수신 스레드를 시작한다. 성공 True / 실패 False (사유는 last_error).
@@ -165,7 +167,7 @@ class NetworkClient:
         # (키가 바뀔 때만 / 0.5초마다 호출하는 규칙은 PlayState 에서 정한다)
         return self.send(protocol.pack_input(key_flags))
     def play_state(self):
-        events = get_events()
+        events = get_events()           # 나중에 client main 에서 분리되면 events 를 매개변수로 받도록 바꾼다. (PlayState 에서 호출)
         for event in events:
             if event.type == SDL_KEYDOWN:
                 if event.key == SDLK_w:
@@ -197,8 +199,12 @@ class NetworkClient:
         # keys_to_flags() 를 호출해 key_flags 를 만들고, send_input() 으로 서버에 보낸다.
         key_flags = self.keys_to_flags(self.keys)
         self.send_input(key_flags)
-        # 0.5초마다 키가 바뀌지 않아도 send_input(0) 을 보내야 한다.
-        pass
+        # 0.5초마다 키가 바뀌지 않아도 send_input(0) 을 보내야 한다. (PlayState 에서 구현)
+        if time.time() - self.last_input_time >= 0.5:
+            self.send_input(key_flags)
+            self.last_input_time = time.time()
+        self.last_input_time = time.time()
+
     def send_shop_buy(self, item_id):
         # 상점에서 아이템 구매를 요청한다. item_id : protocol.ITEM_GLOVE ~ ITEM_DRILL (1~4).
         return self.send(protocol.pack_shop_buy(item_id))
