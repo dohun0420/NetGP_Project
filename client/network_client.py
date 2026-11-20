@@ -226,6 +226,8 @@ class NetworkClient:
         except OSError:
             pass
 if __name__ == "__main__":
+    from client.world_view import ClientWorld
+
     # 단독 실행하면 서버 접속 테스트
     # keys_to_flags()실험 임의의 keys 값을 준다
     # play_state()는 SDL 이벤트를 처리하므로 단독 실행에서는 호출하지 않는다.
@@ -234,11 +236,13 @@ if __name__ == "__main__":
     print(flags)
     # 서버 접속 테스트
     client = NetworkClient()
+    world = ClientWorld()
     if client.connect(title(), PORT) and client.connect_udp(PORT-1):
         print("서버 접속 성공")
         while True:
             msgs = client.poll()
             for name, value in msgs:
+                world.apply_world_message(name, value)
                 print(name, value)
             if not client.running:
                 break
