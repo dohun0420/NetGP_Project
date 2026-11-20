@@ -1,25 +1,18 @@
 from pico2d import *
-from sdl2 import (
-    SDL_GetError, SDL_KEYDOWN, SDLK_d, SDLK_a, SDLK_w, SDLK_s, SDL_KEYUP,
-    SDL_SetTextureColorMod,
-)
+from sdl2 import SDL_KEYDOWN, SDLK_d, SDLK_a, SDLK_w, SDLK_s, SDL_KEYUP
 
-# 서버의 player_id에 대응하는 색상: 0 빨강 / 1 파랑 / 2 초록
-PLAYER_COLORS = ((255, 70, 70), (40, 50, 255), (70, 255, 70))
+from player_view import PlayerView, PLAYER_COLORS     # 그리기는 PlayerView 가 담당한다
+
 
 class Player:
+    # 입력 처리와 이동만 담당한다. 그리기(이미지 · 색상 · 스프라이트)는 PlayerView 로 분리했다.
     def __init__(self, player_id=0):
-        if player_id not in (0, 1, 2):
-            raise ValueError('player_id는 0, 1, 2 중 하나여야 합니다.')
         self.player_id = player_id
         self.x, self.y = 400, 300
         self.frame = 0
         self.dir_x = 0
         self.dir_y = 0
-        # 플레이어마다 별도 이미지를 로딩해 자신의 색상만 적용한다.
-        self.image = load_image('Player.png')
-        if SDL_SetTextureColorMod(self.image.texture, *PLAYER_COLORS[player_id]) != 0:
-            raise RuntimeError('색상 적용 실패: ' + SDL_GetError().decode('utf-8'))
+        self.view = PlayerView(player_id)       # player_id 가 0~2 가 아니면 여기서 ValueError
         self.state = 's'
         self.frame_timer = 0
         self.is_stopped = False
@@ -72,11 +65,4 @@ class Player:
         self.is_stopped = True
 
     def draw(self):
-        if self.state == 's':
-            self.image.clip_draw(self.frame * 33, 130, 33, 56, self.x, self.y, 90, 80)
-        elif self.state == 'w':
-            self.image.clip_draw(self.frame * 33, 86, 33, 46, self.x, self.y, 90, 90)
-        elif self.state == 'd':
-            self.image.clip_draw(self.frame * 33, 45, 33, 48, self.x, self.y, 90, 100)
-        elif self.state == 'a':
-            self.image.clip_draw(self.frame * 33, 0, 33, 57, self.x, self.y, 90, 100)
+        self.view.draw_at(self.x, self.y, self.state, self.frame)
