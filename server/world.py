@@ -1,6 +1,7 @@
 """서버가 관리하는 게임 데이터"""
 import os
 import sys
+from time import monotonic
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from common import constants
 
@@ -24,6 +25,7 @@ class Player:
         self.state = 0                 # 0 대기 / 1 이동 / 2 채굴
         self.key_flags = 0
         self.mined = 0                 # 개인별 채굴 수
+        self.mining_started_at = None
     def move(self, dt):
         print(dt)
         print(self.key_flags)
@@ -87,16 +89,23 @@ class World:
         self.remain = float(constants.TIME_LIMIT)
         self.ended = False
 
+    def try_start_mining(self, player):
+        if player.mining_started_at is None:
+            player.mining_started_at = monotonic()
+            player.key_flags = 0
+
     def apply_input(self, dt, input_datas):
         for player_id, key_flags in input_datas.items():
+            if self.players[player_id].mining_started_at is not None:
+                continue
             self.players[player_id].key_flags = key_flags
             if key_flags < 16:
                 self.players[player_id].move(dt)
             elif self.players[player_id].key_flags < 32:
                 self.players[player_id].state = 2  # 채굴
+                self.try_start_mining(self.players[player_id])
             else:
                 self.players[player_id].state = 3  # 상점
-                # TODO 11/22 : 채굴 시도 로직 연결 필요
     def update(self, dt, input_datas):
         # 게임 시작 후 GameServer가 매 틱 호출한다.
         # 입력을 적용한다
@@ -104,7 +113,6 @@ class World:
         # 아래의 주석들을 apply_input()에서 부른다
         # 1. 플레이어 이동: 저장된 입력으로 이동하고 맵 경계를 보정한다.
         # 2. 채굴 시도
-        # TODO(11/22): try_start_mining() 연결
         # TODO(11/23): update_mining(dt) 연결 인듯 하지만 채굴진행도를 따로 저장하지 않기에 삭제해야 할듯
         # 3. 채굴 완료 판정: 금괴 제거, 팀 금괴/개인 채굴 수 갱신, GOLD_MINED 이벤트 생성.
         # TODO(11/24): complete_mining() 연결
