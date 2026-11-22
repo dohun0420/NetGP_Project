@@ -30,7 +30,11 @@ class PlayView:
         self.golds.update()
         for player_id, data in world.players.items():
             view = self._player_view(player_id)
-            view.set_state(data['x'], data['y'], facing_from_dir(data['dir']), data['state'] == 1)   # state 1 = 이동
+            view.set_state(
+                data['x'], data['y'], facing_from_dir(data['dir']),
+                moving=data['state'] == 1,
+                mining=data['state'] == 2,
+            )
             view.update()
 
     def draw(self, world):
