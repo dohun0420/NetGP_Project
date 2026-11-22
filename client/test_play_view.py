@@ -26,6 +26,7 @@ class FakeMusic:
     def stop(self): music_log.append(("stop",))
 pico = types.ModuleType("pico2d")
 pico.load_image = FakeImage; pico.load_font = lambda path, size: FakeFont(); pico.load_music = FakeMusic
+pico.load_wav = FakeMusic
 sdl = types.ModuleType("sdl2")
 sdl.SDL_GetError = lambda: b""; sdl.SDL_SetTextureColorMod = lambda *a: 0
 for n, v in (("SDL_KEYDOWN", 768), ("SDL_KEYUP", 769), ("SDLK_d", 100), ("SDLK_a", 97), ("SDLK_w", 119), ("SDLK_s", 115)):
@@ -170,5 +171,29 @@ print("6) 상태 반영 OK : dir 6 -> 왼쪽 그림, 이동 중일 때만 걷는
 empty = ClientWorld(); reset(); pv2 = PlayView(); pv2.update(empty); reset(); pv2.draw(empty)
 assert [c[1] for c in log] == ["map.png", "UI.png", "Gold.png", "Timer.png"] and texts[0][0] == "X 0"
 print("7) 빈 화면 OK : 플레이어/금괴가 없어도 배경과 HUD 만 그림")
+
+# 서버가 채굴 상태를 보낸 플레이어에게만 기존 효과가 표시된다.
+world.players[0]['state'] = 2
+world.players[1]['state'] = 2
+pv.update(world)
+reset(); pv.draw(world)
+effects = [call for call in log if call[1] == 'dig_animation.png']
+assert {call[7:9] for call in effects} == {(300, 140), (500, 290)}
+assert all(call[3] == 0 for call in effects)
+
+world.players[0].update(x=320, y=110)
+for _ in range(11):
+    pv.update(world)
+reset(); pv.draw(world)
+effects = [call for call in log if call[1] == 'dig_animation.png']
+assert {call[7:9] for call in effects} == {(320, 150), (500, 290)}
+assert all(call[3] == 25 for call in effects)
+
+world.players[0]['state'] = 0
+world.players[1]['state'] = 0
+pv.update(world)
+reset(); pv.draw(world)
+assert all(call[1] != 'dig_animation.png' for call in log)
+print("8) 채굴 효과 OK : 두 플레이어의 위치와 프레임을 갱신하고 채굴 상태가 끝나면 제거")
 
 print("\n전부 통과")
