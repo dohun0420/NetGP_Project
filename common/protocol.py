@@ -143,15 +143,15 @@ def unpack_game_start(payload):
 def pack_state(remain_x10, team_gold, item_level, players):
     payload = struct.pack(BYTE_ORDER + 'HHB', remain_x10, team_gold, item_level)
     for player in players:
-        payload += struct.pack(BYTE_ORDER + 'BhhBB', *player)
-    _check_len("StoC_STATE", payload, 26)
+        payload += struct.pack(BYTE_ORDER + 'BhhB', *player)
+    _check_len("StoC_STATE", payload, 21)
     return _make_packet("StoC_STATE", payload)
 
 
 def unpack_state(payload):
-    _check_len("StoC_STATE", payload, 26)
+    _check_len("StoC_STATE", payload, 21)
     remain_x10, team_gold, item_level = struct.unpack(BYTE_ORDER + 'HHB', payload[:5])
-    players = [struct.unpack(BYTE_ORDER + 'BhhBB', payload[5 + 7 * i:12 + 7 * i])
+    players = [struct.unpack(BYTE_ORDER + 'BhhB', payload[5 + 6 * i:11 + 6 * i])
                for i in range(3)]
     return remain_x10, team_gold, item_level, players
 
