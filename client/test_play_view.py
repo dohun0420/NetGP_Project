@@ -135,9 +135,9 @@ reset(); BGM("Store.mp3", 10); assert music_log == [("load", "Store.mp3"), ("vol
 print("3) Bgm OK : 파일 로딩 + 볼륨 32(기본), play = 반복 재생, stop = 정지")
 
 # ------------------------------------------------------------- 4) 서버 dir -> 스프라이트 방향
-assert [facing_from_dir(d) for d in range(8)] == ["w", "d", "d", "d", "s", "a", "a", "a"]
+assert [facing_from_dir(d) for d in range(4)] == ["s", "a", "d", "w"]
 assert facing_from_dir(99) == "s"
-print("4) 방향 변환 OK : 0~7 -> 위/오른/오른/오른/아래/왼/왼/왼, 모르는 값은 아래")
+print("4) 방향 변환 OK : 0~4 -> 아래/왼/오른/위, 모르는 값은 아래")
 
 # ------------------------------------------------------------- 5) PlayView : 서버 값만으로 한 화면 (그리는 순서까지)
 world = ClientWorld()
@@ -157,14 +157,14 @@ assert [t[0] for t in texts] == ["X 7", "124"]              # HUD : 팀 금괴 7
 print("5) PlayView OK : 배경 -> 금괴 2개 -> 플레이어 3명(위쪽부터, 서로 다른 이미지) -> HUD, 값은 서버(ClientWorld) 그대로")
 
 # ------------------------------------------------------------- 6) 서버 방향/상태가 그림과 애니메이션에 반영되는가
-world.players[0].update({"dir": 6, "state": 1}); world.players[1].update({"dir": 4, "state": 0})
+world.players[0].update({"dir": 1, "state": 1}); world.players[1].update({"dir": 4, "state": 0})
 before = (pv.players[0].frame, pv.players[1].frame)
 for _ in range(10): pv.update(world)
 assert pv.players[0].frame == (before[0] + 1) % 3            # 이동(state 1) 중인 0번은 10프레임에 1칸
 assert pv.players[1].frame == before[1]                      # 대기(state 0) 중인 1번은 그대로
 reset(); pv.draw(world)
 p0 = [c for c in log if c[1] == "Player.png" and c[7] == 300][0]
-assert p0[3:] == (pv.players[0].frame * 33, 0, 33, 57, 300, 100, 90, 100)       # dir 6(왼쪽) -> 'a' 스프라이트
+assert p0[3:] == (pv.players[0].frame * 33, 0, 33, 57, 300, 100, 90, 100)       # dir 1(왼쪽) -> 'a' 스프라이트
 print("6) 상태 반영 OK : dir 6 -> 왼쪽 그림, 이동 중일 때만 걷는 프레임이 진행")
 
 # ------------------------------------------------------------- 7) 게임 시작 전(빈 ClientWorld)에도 죽지 않는가

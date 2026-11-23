@@ -5,10 +5,15 @@ from player_view import PlayerView
 
 
 def facing_from_dir(direction):
-    # [임시] 서버 STATE 의 dir(0~7, 서버 world.py 기준) -> 스프라이트 방향('s' 아래 / 'w' 위 / 'd' 오른쪽 / 'a' 왼쪽).
-    # 0 위 / 1 오른쪽 위 / 2 오른쪽 / 3 오른쪽 아래 / 4 아래 / 5 왼쪽 아래 / 6 왼쪽 / 7 왼쪽 위.
-    # 스프라이트가 4방향뿐이라 대각선은 좌우 그림을 쓴다. dir 의 의미(4방향/8방향)가 확정되면 이 표만 고친다.
-    return {0: 'w', 1: 'd', 2: 'd', 3: 'd', 4: 's', 5: 'a', 6: 'a', 7: 'a'}.get(direction, 's')
+    # dir : 0 아래 / 1 왼쪽 / 2 오른쪽 / 3 위
+    if direction == 1:
+        return 'a'
+    elif direction == 2:
+        return 'd'
+    elif direction == 3:
+        return 'w'
+    else:
+        return 's'
 
 
 class PlayView:

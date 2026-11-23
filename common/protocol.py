@@ -138,7 +138,6 @@ def unpack_game_start(payload):
 
 
 # ---- 104  StoC_STATE : 남은 시간, 팀 금괴, 등급, 플레이어 상태 -----------
-# dir : 0 아래 / 1 왼쪽 / 2 오른쪽 / 3 위
 # state : 0 대기 / 1 이동 / 2 채굴
 def pack_state(remain_x10, team_gold, item_level, players):
     payload = struct.pack(BYTE_ORDER + 'HHB', remain_x10, team_gold, item_level)
