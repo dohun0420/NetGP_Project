@@ -24,7 +24,6 @@ class Player:
         self.player_id = player_id     # 0 빨강 / 1 파랑 / 2 초록
         self.x = float(x)
         self.y = float(y)
-        self.dir = 0                   # 대각 방향도 처리해야하니 0~7까지 8방향으로 처리
         self.state = 0                 # 0 대기 / 1 이동 / 2 채굴
         self.key_flags = 0
         self.mined = 0                 # 개인별 채굴 수
@@ -35,9 +34,7 @@ class Player:
         if self.key_flags == 0:
             self.state = 0  # 대기
         else:
-            self.state = 1  # 이동
             dx, dy = 0, 0
-
             if self.key_flags & 0x01:  # 위
                 dy += 1
             if self.key_flags & 0x02:  # 아래
@@ -46,26 +43,12 @@ class Player:
                 dx -= 1
             if self.key_flags & 0x08:  # 오른쪽
                 dx += 1
-
-
-            # 방향 설정 (0~7)
-            if dx == -1 and dy == -1:
-                self.dir = 7  # 왼쪽 위
-            elif dx == -1 and dy == 0:
-                self.dir = 6  # 왼쪽
-            elif dx == -1 and dy == 1:
-                self.dir = 5  # 왼쪽 아래
-            elif dx == 0 and dy == -1:
-                self.dir = 0  # 위
-            elif dx == 0 and dy == 1:
-                self.dir = 4  # 아래
-            elif dx == 1 and dy == -1:
-                self.dir = 1  # 오른쪽 위
-            elif dx == 1 and dy == 0:
-                self.dir = 2  # 오른쪽
-            elif dx == 1 and dy == 1:
-                self.dir = 3  # 오른쪽 아래
-            print(dx, dy)
+            # 플레이어의 키 입력이 이상할 수 있다 (왼쪽과 오른쪽을 동시에 누르거나 위와 아래를 동시에 누르는 경우) 따라서 dx, dy가 0이 될 수 있다. 이 경우 이동하지 않는다.
+            if dx == 0 and dy == 0:
+                self.state = 0
+                return
+            self.state = 1  # 이동
+            # 방향은 서버에서 계산할 필요 없다 클라에서 이전 위치와 현재 위치를 비교해서 계산한다.
             # 이동 속도 적용 (초당 픽셀 이동량) dt는 실제 서버가 틱에 걸린시간
             speed_per_tick = constants.PLAYER_SPEED * dt
             self.x += dx * speed_per_tick
