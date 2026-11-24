@@ -16,6 +16,9 @@ ITEM_TABLE = {
     for item_id, name in enumerate(('hand', 'glove', 'shovel', 'pickaxe', 'drill'))
 }
 
+MINING_RANGE = 50                  # [11/24] 채굴 가능 거리(px). 기존 게임과 같다
+
+
 class Player:
     def __init__(self, player_id, x, y):
         self.player_id = player_id     # 0 빨강 / 1 파랑 / 2 초록
@@ -71,11 +74,51 @@ class World:
         self.item_level = 0
         self.remain = float(constants.TIME_LIMIT)
         self.ended = False
+        self.events = []               # [11/24] 이번 틱에 생긴 GOLD_MINED 등. GameServer 가 꺼내서 전송한다
 
     def try_start_mining(self, player):
         if player.mining_started_at is None:
             player.mining_started_at = monotonic()
             player.key_flags = 0
+
+    def update_mining(self):
+        # [11/24] 채굴 시간이 지난 플레이어의 채굴을 마무리한다. 채굴 시간은 팀 아이템 등급에 따라 5 ~ 1초.
+        dig_time = ITEM_TABLE[self.item_level]['dig_time']
+        now = monotonic()
+        for player in self.players.values():
+            if player.mining_started_at is not None and now - player.mining_started_at >= dig_time:
+                self.complete_mining(player)
+
+    def complete_mining(self, player):
+        # [11/24] 채굴 완료. 가까이(MINING_RANGE 이내) 있는 금괴 중 가장 가까운 1개를 제거하고
+        # 팀 금괴 +1, 개인 채굴 수 +1, GOLD_MINED 이벤트를 만든다. 근처에 금괴가 없으면 아무 일도 일어나지 않는다.
+        # 성공이든 실패든 채굴 상태는 끝난다. (끝내지 않으면 이 플레이어의 입력이 계속 무시된다)
+        player.mining_started_at = None
+        player.state = 0
+        player.key_flags = 0
+        spot = self._nearest_gold(player)
+        if spot is None:
+            return None
+        del self.golds[spot.spot_id]
+        self.team_gold += 1
+        player.mined += 1
+        event = (spot.spot_id, player.player_id, self.team_gold)     # (금괴 번호, 채굴한 플레이어, 갱신된 팀 금괴)
+        self.events.append(event)
+        return event
+
+    def _nearest_gold(self, player):
+        # MINING_RANGE 이내(정확히 50px 도 포함)에서 가장 가까운 금괴. 거리가 같으면 번호가 앞선 금괴.
+        nearest, nearest_dist = None, None
+        for spot in self.golds.values():
+            dist = ((player.x - spot.x) ** 2 + (player.y - spot.y) ** 2) ** 0.5
+            if dist <= MINING_RANGE and (nearest is None or dist < nearest_dist):
+                nearest, nearest_dist = spot, dist
+        return nearest
+
+    def pop_events(self):
+        # [11/24] 쌓인 이벤트를 꺼내고 비운다. (GameServer.broadcast_gold_mined 가 호출)
+        events, self.events = self.events, []
+        return events
 
     def apply_input(self, dt, input_datas):
         for player_id, key_flags in input_datas.items():
@@ -93,6 +136,7 @@ class World:
         # 게임 시작 후 GameServer가 매 틱 호출한다.
         # 입력을 적용한다
         self.apply_input(dt, input_datas)
+        self.update_mining()            # [11/24] 채굴 시간이 끝난 플레이어는 complete_mining() 으로 마무리한다
         # 아래의 주석들을 apply_input()에서 부른다
         # 1. 플레이어 이동: 저장된 입력으로 이동하고 맵 경계를 보정한다.
         # 2. 채굴 시도

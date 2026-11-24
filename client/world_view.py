@@ -73,9 +73,13 @@ class ClientWorld:
         # inbox에는 월드, 로비, 오류 등 여러 종류의 수신 메시지가 도착 순서대로 쌓인다.
         # 메인 스레드가 poll()로 꺼낸 메시지 중 GAME_START와 STATE만 ClientWorld에 반영한다.
         # name은 메시지 종류이고, 이 두 메시지의 payload는 헤더를 제외한 본문 바이트다.
+
         if name == 'StoC_GAME_START':
             # 게임 시작 시 제한 시간, 가격표, 플레이어 시작 위치와 금괴 배치를 설정한다.
             self.init_from_start(*protocol.unpack_game_start(payload))
+        elif name == 'StoC_GOLD_MINED':
+            # 채굴이 끝난 금괴를 지우고 팀 금괴를 서버 값으로 맞춘다. (STATE 보다 먼저 도착한다)
+            self.apply_gold_mined(*protocol.unpack_gold_mined(payload))
         elif name == 'StoC_STATE':
             # 플레이 중에는 서버가 보낸 최신 값으로 플레이어와 HUD에 표시할 데이터를 갱신한다.
             remain_x10, team_gold, item_level, players = protocol.unpack_state(payload)
@@ -107,3 +111,9 @@ if __name__ == '__main__':
     world.interpolate(0.016)
     print(f"After interpolate: {player}")
 
+
+    def apply_gold_mined(self, spot_id, player_id, team_gold):
+        # [11/24] GOLD_MINED 반영 : 해당 금괴를 지우면 GoldView 가 다음 프레임부터 그리지 않는다.
+        self.golds.pop(spot_id, None)       # 이미 지워진 금괴 번호가 와도 오류 없이 넘어간다
+        self.gold_count = len(self.golds)
+        self.team_gold = team_gold
