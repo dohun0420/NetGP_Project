@@ -99,7 +99,11 @@ class ClientWorld:
     def update(self, dt):
         # 매 프레임 호출 :
         self.interpolate(dt)
-
+    def apply_gold_mined(self, spot_id, player_id, team_gold):
+        # [11/24] GOLD_MINED 반영 : 해당 금괴를 지우면 GoldView 가 다음 프레임부터 그리지 않는다.
+        self.golds.pop(spot_id, None)       # 이미 지워진 금괴 번호가 와도 오류 없이 넘어간다
+        self.gold_count = len(self.golds)
+        self.team_gold = team_gold
 if __name__ == '__main__':
     # interpolate()를 테스트한다. 서버에서 임의의 player 데이터를 준다고 가정한다, client main에서 매 프레임 마다 호출하고 받는다 한다
     player = {'x': 100.0, 'y': 100.0, 'dir': 0, 'state': 1, 'dx': 3.0, 'dy': -2.0}
@@ -112,8 +116,3 @@ if __name__ == '__main__':
     print(f"After interpolate: {player}")
 
 
-    def apply_gold_mined(self, spot_id, player_id, team_gold):
-        # [11/24] GOLD_MINED 반영 : 해당 금괴를 지우면 GoldView 가 다음 프레임부터 그리지 않는다.
-        self.golds.pop(spot_id, None)       # 이미 지워진 금괴 번호가 와도 오류 없이 넘어간다
-        self.gold_count = len(self.golds)
-        self.team_gold = team_gold
