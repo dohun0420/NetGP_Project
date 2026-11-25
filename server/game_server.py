@@ -151,6 +151,7 @@ class GameServer:
         if self.world is None:              # 게임 시작 전(로비)에는 STATE 를 보내지 않는다
             return
         self.broadcast_gold_mined()         # [11/24] STATE 보다 먼저 채굴 완료 이벤트를 전송한다
+        self.broadcast_gold_respawn()       # 마지막 GOLD_MINED 뒤에 새 금괴 위치를 전송한다
         packet = protocol.pack_state(*self.world.snapshot())    # 같은 패킷을 모두에게 보낸다
         for session in list(self.sessions):                     # 전송 실패 시 세션이 닫힐 수 있어 복사본으로 순회
             session.send(packet)
@@ -161,3 +162,12 @@ class GameServer:
             packet = protocol.pack_gold_mined(spot_id, player_id, team_gold)
             for session in list(self.sessions):
                 session.send(packet)
+
+    def broadcast_gold_respawn(self):
+        golds = self.world.pending_gold_respawn
+        if golds is None:
+            return
+        packet = protocol.pack_gold_respawn(golds)
+        for session in list(self.sessions):
+            session.send(packet)
+        self.world.pending_gold_respawn = None

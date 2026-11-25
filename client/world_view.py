@@ -1,6 +1,7 @@
 """클라이언트가 화면에 표시할 서버의 게임 데이터"""
 import os, sys
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+from common import protocol
 from common.constants import PLAYER_SPEED
 from common import protocol
 global running
@@ -77,6 +78,8 @@ class ClientWorld:
 
     def apply_world_message(self, name, payload):
         # inbox에는 월드, 로비, 오류 등 여러 종류의 수신 메시지가 도착 순서대로 쌓인다.
+        # name은 메시지 종류이고, payload는 헤더를 제외한 본문 바이트다.
+
         # 메인 스레드가 poll()로 꺼낸 메시지 중 GAME_START와 STATE만 ClientWorld에 반영한다.
         # name은 메시지 종류이고, 이 두 메시지의 payload는 헤더를 제외한 본문 바이트다.
         # TODO: network_client에서 unpacking을 해주는게 맞는듯 여기는 클라 데이터만 갱신해야 역할 적으로 맞다.
@@ -86,6 +89,9 @@ class ClientWorld:
             #self.init_from_start(*protocol.unpack_game_start(payload))
         elif name == 'StoC_GOLD_MINED':
             # 채굴이 끝난 금괴를 지우고 팀 금괴를 서버 값으로 맞춘다. (STATE 보다 먼저 도착한다)
+            self.apply_gold_mined(*protocol.unpack_gold_mined(payload))
+        elif name == 'StoC_GOLD_RESPAWN':
+            self.apply_gold_respawn(protocol.unpack_gold_respawn(payload))
             self.apply_gold_mined(*payload) #protocol.unpack_gold_mined(payload)
             #self.apply_gold_mined(*protocol.unpack_gold_mined(payload))
         elif name == 'StoC_STATE':
@@ -110,6 +116,11 @@ class ClientWorld:
         self.golds.pop(spot_id, None)       # 이미 지워진 금괴 번호가 와도 오류 없이 넘어간다
         self.gold_count = len(self.golds)
         self.team_gold = team_gold
+
+    def apply_gold_respawn(self, golds):
+        self.golds = {spot_id: {'x': x, 'y': y} for spot_id, x, y in golds}
+        self.gold_count = len(self.golds)
+
     def print_data(self):           # TODO : 디버깅용으로 나중에 지운다
         print(f"ClientWorld: time_limit={self.time_limit}, costs={self.costs}, players={self.players}, gold_count={self.gold_count}, golds={self.golds}, remain_x10={self.remain_x10}, team_gold={self.team_gold}, item_level={self.item_level}")
 if __name__ == '__main__':
