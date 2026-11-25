@@ -7,7 +7,7 @@ import protocol as p
 # 테스트에 사용할 값
 COSTS = (10, 14, 24, 40)                                  # 장갑, 삽, 곡괭이, 드릴 순서
 PLAYERS = [(0, 1, 2), (1, -1, 0), (2, 1000, 600)]           # (플레이어 번호, x, y)
-STATES = [(0, 1, 2, 0, 0), (1, -1, 0, 1, 1), (2, 1000, 600, 3, 2)]  # (번호, x, y, 방향, 상태), 진행률 없음
+STATES = [(0, 1, 2, 0), (1, -1, 0, 1), (2, 1000, 600, 2)]  # (번호, x, y, 상태), 진행률 없음
 GOLDS = [(7, 1000, -2)]                                   # (금괴 번호, x, y), 음수 좌표도 복원하는지 확인
 GOLD_COUNT = len(GOLDS)
 MINED = [(0, 5), (1, 256), (2, 7)]                        # (플레이어 번호, 채굴 수), 256으로 u16 확인
@@ -16,10 +16,10 @@ MINED = [(0, 5), (1, 256), (2, 7)]                        # (플레이어 번호
 def test_roundtrip_all_values():
     # 여러 인자를 받는 패킷 : (입력값, 예상 반환값, 본문 길이)
     # 금괴 1개 기준 GAME_START = 26 + 5 = 31B, GOLD_RESPAWN = 1 + 5 = 6B
-    # STATE = 공통 정보 5B + 플레이어 7B x 3명 = 26B
+    # STATE = 공통 정보 5B + 플레이어 6B x 3명 = 23B
     samples = {
         "StoC_GAME_START": ((180, COSTS, PLAYERS, GOLD_COUNT, GOLDS), (180, COSTS, PLAYERS, GOLD_COUNT, GOLDS), 31),
-        "StoC_STATE": ((1800, 300, 4, STATES), (1800, 300, 4, STATES), 26),
+        "StoC_STATE": ((1800, 300, 4, STATES), (1800, 300, 4, STATES), 23),
         "StoC_GOLD_MINED": ((7, 2, 300), (7, 2, 300), 4),
         "StoC_GOLD_RESPAWN": ((GOLDS,), GOLDS, 6),
         "StoC_SHOP_RESULT": ((0, 4, 4, 300), (0, 4, 4, 300), 5),
@@ -63,12 +63,14 @@ def test_exact_bytes():
     assert p.KEY_W + p.KEY_A + p.KEY_S + p.KEY_D + p.KEY_SPACE == 31   # 키 비트가 겹치지 않음
     # 예상 바이트를 직접 비교해 pack/unpack 양쪽이 같은 실수를 해도 발견한다
     # 앞의 3바이트는 종류 1B + 본문 길이 2B이며, 여러 바이트 숫자는 big-endian
+
     assert p.pack_game_start(180, COSTS, PLAYERS, GOLD_COUNT, GOLDS) == bytes.fromhex(
         '67 00 1f 00 b4 00 0a 00 0e 00 18 00 28 '
         '00 00 01 00 02 01 ff ff 00 00 02 03 e8 02 58 01 07 03 e8 ff fe')
+    '''
     assert p.pack_state(1800, 300, 4, STATES) == bytes.fromhex(
-        '68 00 1a 07 08 01 2c 04 '
-        '00 00 01 00 02 00 00 01 ff ff 00 00 01 01 02 03 e8 02 58 03 02')
+        '68 00 17 07 08 01 2c 00 04 00 00 01 00 02 01 ff ff 00 00 02 03 e8 02 58 02 00')
+    '''
     assert p.pack_gold_mined(7, 2, 300) == bytes([105, 0, 4, 7, 2, 1, 44])
     assert p.pack_gold_respawn(GOLDS) == bytes.fromhex('6a 00 06 01 07 03 e8 ff fe')
     assert p.pack_shop_result(0, 4, 4, 300) == bytes([107, 0, 5, 0, 4, 4, 1, 44])
