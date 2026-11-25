@@ -4,6 +4,7 @@ import sys
 from time import monotonic
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from common import constants
+from server.gold_spawner import generate_gold_spots
 
 
 # 기존 문자열 상수를 패킷의 아이템 번호(0 기본, 1 장갑 ~ 4 드릴)에 연결한다.
@@ -75,6 +76,7 @@ class World:
         self.remain = float(constants.TIME_LIMIT)
         self.ended = False
         self.events = []               # [11/24] 이번 틱에 생긴 GOLD_MINED 등. GameServer 가 꺼내서 전송한다
+        self.pending_gold_respawn = None
 
     def try_start_mining(self, player):
         if player.mining_started_at is None:
@@ -120,6 +122,13 @@ class World:
         events, self.events = self.events, []
         return events
 
+    def respawn_gold_if_empty(self):
+        if self.golds:
+            return
+        golds = generate_gold_spots()
+        self.golds = {spot_id: GoldSpot(spot_id, x, y) for spot_id, x, y in golds}
+        self.pending_gold_respawn = golds
+
     def apply_input(self, dt, input_datas):
         for player_id, key_flags in input_datas.items():
             if self.players[player_id].mining_started_at is not None:
@@ -144,7 +153,7 @@ class World:
         # 3. 채굴 완료 판정: 금괴 제거, 팀 금괴/개인 채굴 수 갱신, GOLD_MINED 이벤트 생성.
         # TODO(11/24): complete_mining() 연결
         # 4. 금괴가 모두 없어지면 재생성하고 GOLD_RESPAWN 이벤트를 생성한다.
-        # TODO(11/25): respawn_gold_if_empty() 연결
+        self.respawn_gold_if_empty()
         # 5. 타이머 갱신과 종료 판정. 상점이 열려 있어도 시간은 흐른다.
         self.remain = max(0.0, self.remain - dt)
         if self.remain <= 0:
