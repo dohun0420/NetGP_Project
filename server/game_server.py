@@ -130,7 +130,10 @@ class GameServer:
 
     def handle_shop_buy(self, session, payload):
         item_id = protocol.unpack_shop_buy(payload)
-        # TODO(11/27) handle_shop_buy : 검증 -> SHOP_RESULT 전송
+        result = self.world.try_buy(item_id)
+        packet = protocol.pack_shop_result(result)
+        session.send(packet)
+        # 11/26 굳이 shop을 만들 필요없는듯 world에서 바로 처리하고 결과를 보내면 됨. shop.py 삭제
 
     def broadcast_LobbyState(self):
         # 대기 인원수를 모든 세션에 전송한다. (게임 시작 전 로비 상태)
