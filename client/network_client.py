@@ -166,8 +166,7 @@ class NetworkClient:
         # 눌린 키 상태를 서버로 보낸다. key_flags : protocol.KEY_W | KEY_A | KEY_S | KEY_D | KEY_SPACE 를 더한 값.
         # (키가 바뀔 때만 / 0.5초마다 호출하는 규칙은 PlayState 에서 정한다)
         return self.send(protocol.pack_input(key_flags))
-    def play_state(self):
-        events = get_events()           # 나중에 client main 에서 분리되면 events 를 매개변수로 받도록 바꾼다. (PlayState 에서 호출)
+    def play_state(self, events):
         for event in events:
             if event.type == SDL_KEYDOWN:
                 if event.key == SDLK_w:
