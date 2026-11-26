@@ -35,7 +35,7 @@ def main():
                 world.apply_world_message(name, value)
             if world.running:
                 events = pico2d.get_events()
-                client.play_state(events)
+                world.handle_event(events, client)
                 last_frame_time = time.monotonic()
                 dt = time.monotonic() - last_frame_time
                 world.update(dt)
