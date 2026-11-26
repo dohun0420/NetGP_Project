@@ -96,10 +96,10 @@ say("A6) 입력 OK : 채굴 중에는 이동 입력 무시, 완료 후에는 다
 # A7) STATE 용 snapshot 에 반영되는가
 Clock.now = 5000.0
 w = make_world(golds=[(0, 420, 300)]); w.update(0.05, {0: p.KEY_SPACE})
-assert w.snapshot()[3][0][4] == 2
+assert w.snapshot()[3][0][3] == 2
 Clock.now = 5005.0; w.update(0.05, {})
 remain_x10, team_gold, item_level, players = w.snapshot()
-assert team_gold == 1 and players[0][4] == 0
+assert team_gold == 1 and players[0][3] == 0
 say("A7) snapshot OK : 채굴 중 state 2 -> 완료 후 state 0, 팀 금괴 1")
 
 # ================================================================ B) GameServer.broadcast_gold_mined
@@ -166,7 +166,7 @@ world = ClientWorld()
 world.init_from_start(180, (10, 14, 24, 40), [(0, 300, 100), (1, 500, 250), (2, 700, 180)], 3, [(0, 100, 50), (1, 200, 60), (2, 300, 70)])
 world.apply_world_message("StoC_GOLD_MINED", p.pack_gold_mined(2, 1, 9)[3:])
 assert sorted(world.golds) == [0, 1] and world.team_gold == 9
-world.apply_world_message("StoC_STATE", p.pack_state(1700, 9, 0, [(0, 300, 100, 0, 0), (1, 500, 250, 0, 0), (2, 700, 180, 0, 0)])[3:])
+world.apply_world_message("StoC_STATE", p.pack_state(1700, 9, 0, [(0, 300, 100, 0), (1, 500, 250, 0), (2, 700, 180, 0)])[3:])
 assert sorted(world.golds) == [0, 1] and world.team_gold == 9 and world.remain_x10 == 1700
 say("C2) 메시지 연결 OK : apply_world_message 가 GOLD_MINED 바이트를 해석해 반영, 이어서 온 STATE 와 값이 어긋나지 않음")
 

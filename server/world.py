@@ -4,7 +4,7 @@ import sys
 from time import monotonic
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from common import constants
-
+from server.gold_spawner import generate_gold_spots
 
 # 기존 문자열 상수를 패킷의 아이템 번호(0 기본, 1 장갑 ~ 4 드릴)에 연결한다.
 # 팀 전체에 적용되는 아이템이므로 계획서에 따라 기본 비용의 2배로 조립한다.
@@ -74,7 +74,7 @@ class World:
         self.remain = float(constants.TIME_LIMIT)
         self.ended = False
         self.events = []               # [11/24] 이번 틱에 생긴 GOLD_MINED 등. GameServer 가 꺼내서 전송한다
-
+        self.pending_gold_respawn = None
     def try_start_mining(self, player):
         if player.mining_started_at is None:
             player.mining_started_at = monotonic()
@@ -129,6 +129,12 @@ class World:
         # [11/24] 쌓인 이벤트를 꺼내고 비운다. (GameServer.broadcast_gold_mined 가 호출)
         events, self.events = self.events, []
         return events
+    def respawn_gold_if_empty(self):
+        if self.golds:
+            return
+        golds = generate_gold_spots()
+        self.golds = {spot_id: GoldSpot(spot_id, x, y) for spot_id, x, y in golds}
+        self.pending_gold_respawn = golds
 
     def apply_input(self, dt, input_datas):
         for player_id, key_flags in input_datas.items():
@@ -148,8 +154,7 @@ class World:
         # 입력을 적용한다
         self.apply_input(dt, input_datas)
         self.update_mining()            # [11/24] 채굴 시간이 끝난 플레이어는 complete_mining() 으로 마무리한다
-        # 4. 금괴가 모두 없어지면 재생성하고 GOLD_RESPAWN 이벤트를 생성한다.
-        # TODO(11/25): respawn_gold_if_empty() 연결
+        self.respawn_gold_if_empty()
         # 5. 타이머 갱신과 종료 판정. 상점이 열려 있어도 시간은 흐른다.
         self.remain = max(0.0, self.remain - dt)
         if self.remain <= 0:
@@ -157,8 +162,7 @@ class World:
             # TODO(11/29): calc_result()로 최종 팀 금괴/개인 기여도 집계
 
     def snapshot(self):
-        # [11/17] STATE 패킷에 넣을 값을 만든다. protocol.pack_state(*world.snapshot()) 로 바로 쓴다.
-        # 반환 : (remain_x10, team_gold, item_level, players)  players = [(player_id, x, y, dir, state), ...]
+        # 반환 : (remain_x10, team_gold, item_level, players)  players = [(player_id, x, y, state), ...]
         remain_x10 = max(0, min(65535, round(self.remain * 10)))  # 남은 시간 (0.1초 단위)
         players = [(player.player_id, int(player.x), int(player.y), player.state)
                    for _, player in sorted(self.players.items())]  # player_id 순서로 고정
