@@ -35,7 +35,7 @@ w.players[1] = Player(1, 500, 300)
 w.players[1].dir, w.players[1].state = 3, 1
 w.team_gold, w.item_level, w.remain = 7, 2, 123.46
 snap = w.snapshot()
-assert snap == (1235, 7, 2, [(0, 400, 299, 0, 0), (1, 500, 300, 3, 1), (2, 600, 300, 0, 0)]), snap
+assert snap == (1235, 7, 2, [(0, 400, 299, 0), (1, 500, 300, 1), (2, 600, 300, 0)]), snap
 assert p.unpack_state(p.pack_state(*snap)[3:]) == snap
 w.remain = -0.3; assert w.snapshot()[0] == 0
 w.remain = 9999;  assert w.snapshot()[0] == 65535
@@ -67,7 +67,7 @@ assert len(a) == len(b) == len(c) and a == b == c
 remains = [x[0] for x in a]
 assert all(m >= n for m, n in zip(remains, remains[1:])) and TIME_LIMIT * 10 - 10 < remains[0] <= TIME_LIMIT * 10
 assert 1800 - remains[-1] in range(10, 16), remains[-1]
-assert a[0][3][1][1] == 400 + 100 and a[-1][3][1][1] == 777 and a[-1][3][1][4] == 1
+assert a[0][3][1][1] == 400 + 100 and a[-1][3][1][1] == 777 and a[-1][3][1][3] == 1
 print(f"3) 20Hz OK : 1.3초 동안 STATE {len(a)}개, 3명에게 동일, 남은 시간 {remains[0]} -> {remains[-1]} (0.1초 단위), 위치 변경 반영")
 
 # ------------------------------------------------------------- 4) 실제 소켓 : 클라이언트 3명이 접속하면 JOIN_OK -> GAME_START -> STATE 가 연속으로 온다
