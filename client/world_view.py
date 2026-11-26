@@ -1,4 +1,10 @@
 """클라이언트가 화면에 표시할 서버의 게임 데이터"""
+import os, sys
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+from common import protocol
+from common.constants import PLAYER_SPEED
+
+global running
 
 
 class ClientWorld:
@@ -11,12 +17,13 @@ class ClientWorld:
         self.remain_x10 = 0              # STATE 패킷과 같은 0.1초 단위
         self.team_gold = 0
         self.item_level = 0
+        self.running = False
 
     def init_from_start(self, time_limit, costs, players, gold_count, golds):
         self.time_limit = time_limit
         self.costs = tuple(costs)
         self.players = {
-            player_id: {'x': float(x), 'y': float(y), 'dir': 0, 'state': 0}
+            player_id: {'x': float(x), 'y': float(y), 'dir': 0, 'state': 0, 'dx': 0.0, 'dy': 0.0}
             for player_id, x, y in players
         }
         self.gold_count = gold_count
@@ -27,32 +34,134 @@ class ClientWorld:
         self.remain_x10 = time_limit * 10
         self.team_gold = 0
         self.item_level = 0
+        self.running = True
+
+    def calc_dir(self, player_id, new_x, new_y):
+        # 단독 실행 등 dir 없이 좌표만 들어올 때 보조용 (dir : 0 아래 / 1 왼쪽 / 2 오른쪽 / 3 위)
+        player = self.players[player_id]
+        dx = new_x - player['x']
+        dy = new_y - player['y']
+        if abs(dx) > abs(dy):
+            player['dir'] = 2 if dx > 0 else 1
+        else:
+            player['dir'] = 3 if dy > 0 else 0
+
+    def interpolate(self, dt):
+        speed = PLAYER_SPEED  # 초당 픽셀 이동량
+        for player in self.players.values():
+            if player['state'] == 1:  # 이동 중인 플레이어만 보간
+                if abs(player['dx']) < 0.01 and abs(player['dy']) < 0.01:
+                    player['dx'] = 0.0
+                    player['dy'] = 0.0
+                    continue
+                dx = speed * dt
+                if abs(player['dx']) < dx: dx = abs(player['dx'])
+
+                if player['dx'] > 0:
+                    player['x'] += dx
+                    player['dx'] -= dx
+                else:
+                    player['x'] -= dx
+                    player['dx'] += dx
+                dy = speed * dt
+                if abs(player['dy']) < dy: dy = abs(player['dy'])
+                if player['dy'] > 0:
+                    player['y'] += dy
+                    player['dy'] -= dy
+                else:
+                    player['y'] -= dy
+                    player['dy'] += dy
 
     def apply_world_message(self, name, payload):
-        # inbox에는 월드, 로비, 오류 등 여러 종류의 수신 메시지가 도착 순서대로 쌓인다.
-        # 메인 스레드가 poll()로 꺼낸 메시지 중 GAME_START와 STATE만 ClientWorld에 반영한다.
-        # name은 메시지 종류이고, 이 두 메시지의 payload는 헤더를 제외한 본문 바이트다.
-        from common import protocol
-
         if name == 'StoC_GAME_START':
-            # 게임 시작 시 제한 시간, 가격표, 플레이어 시작 위치와 금괴 배치를 설정한다.
-            self.init_from_start(*protocol.unpack_game_start(payload))
+            data = protocol.unpack_game_start(payload) if isinstance(payload, (bytes, bytearray)) else payload
+            self.init_from_start(*data)
         elif name == 'StoC_GOLD_MINED':
-            # 채굴이 끝난 금괴를 지우고 팀 금괴를 서버 값으로 맞춘다. (STATE 보다 먼저 도착한다)
-            self.apply_gold_mined(*protocol.unpack_gold_mined(payload))
+            data = protocol.unpack_gold_mined(payload) if isinstance(payload, (bytes, bytearray)) else payload
+            self.apply_gold_mined(*data)
+        elif name == 'StoC_GOLD_RESPAWN':
+            data = protocol.unpack_gold_respawn(payload) if isinstance(payload, (bytes, bytearray)) else payload
+            self.apply_gold_respawn(data)
         elif name == 'StoC_STATE':
-            # 플레이 중에는 서버가 보낸 최신 값으로 플레이어와 HUD에 표시할 데이터를 갱신한다.
-            remain_x10, team_gold, item_level, players = protocol.unpack_state(payload)
-            self.players = {
-                player_id: {'x': x, 'y': y, 'dir': direction, 'state': state}
-                for player_id, x, y, direction, state in players
-            }
+            data = protocol.unpack_state(payload) if isinstance(payload, (bytes, bytearray)) else payload
+            remain_x10, team_gold, item_level, players = data
+            for p_info in players:
+                if len(p_info) == 5:
+                    player_id, x, y, direction, state = p_info
+                    player = self.players[player_id]
+                    player['dir'] = direction
+                else:
+                    player_id, x, y, state = p_info
+                    player = self.players[player_id]
+                    self.calc_dir(player_id, x, y)
+                player['dx'] = float(x) - float(player['x'])
+                player['dy'] = float(y) - float(player['y'])
+                player['state'] = state
             self.remain_x10 = remain_x10
             self.team_gold = team_gold
             self.item_level = item_level
 
+    def update(self, dt):
+        self.interpolate(dt)
+
     def apply_gold_mined(self, spot_id, player_id, team_gold):
         # [11/24] GOLD_MINED 반영 : 해당 금괴를 지우면 GoldView 가 다음 프레임부터 그리지 않는다.
-        self.golds.pop(spot_id, None)       # 이미 지워진 금괴 번호가 와도 오류 없이 넘어간다
+        self.golds.pop(spot_id, None)
         self.gold_count = len(self.golds)
         self.team_gold = team_gold
+
+    def apply_gold_respawn(self, golds):
+        self.golds = {spot_id: {'x': x, 'y': y} for spot_id, x, y in golds}
+        self.gold_count = len(self.golds)
+
+    def print_data(self):
+        print(f"ClientWorld: time_limit={self.time_limit}, costs={self.costs}, players={self.players}, gold_count={self.gold_count}, golds={self.golds}, remain_x10={self.remain_x10}, team_gold={self.team_gold}, item_level={self.item_level}")
+
+
+if __name__ == '__main__':
+    import play_view
+    import pico2d
+
+    world = ClientWorld()
+
+    name = 'StoC_GAME_START'
+    time_limit = 180
+    costs = (10, 14, 24, 40)
+    players = [(0, 100, 200), (1, 100, 100), (2, 900, 400)]
+    gold_count = 3
+    golds = [(7, 1000, 1), (8, 100, 200), (9, 300, 400)]
+    value = (time_limit, costs, players, gold_count, golds)
+    world.apply_world_message(name, value)
+    world.print_data()
+    pico2d.open_canvas(1000, 600)
+    render = play_view.PlayView()
+    render.update(world)
+    pico2d.clear_canvas()
+    render.draw(world)
+    pico2d.update_canvas()
+    pico2d.delay(1)
+
+    name = 'StoC_STATE'
+    remain_x10 = 1799
+    team_gold = 0
+    item_level = 0
+    players = [(0, 100, 200, 0), (1, 200, 200, 1), (2, 900, 400, 2)]
+    value = remain_x10, team_gold, item_level, players
+    world.apply_world_message(name, value)
+    world.print_data()
+    pico2d.clear_canvas()
+    render.draw(world)
+    pico2d.delay(1)
+    for i in range(10):
+        world.update(0.1)
+        render.update(world)
+        pico2d.clear_canvas()
+        render.draw(world)
+        pico2d.update_canvas()
+        pico2d.delay(0.1)
+    world.print_data()
+    render.update(world)
+    render.draw(world)
+    pico2d.update_canvas()
+    pico2d.delay(1)
+    pico2d.close_canvas()
