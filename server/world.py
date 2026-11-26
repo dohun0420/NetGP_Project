@@ -4,7 +4,6 @@ import sys
 from time import monotonic
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from common import constants
-from server.gold_spawner import generate_gold_spots
 
 
 # 기존 문자열 상수를 패킷의 아이템 번호(0 기본, 1 장갑 ~ 4 드릴)에 연결한다.
@@ -25,17 +24,22 @@ class Player:
         self.player_id = player_id     # 0 빨강 / 1 파랑 / 2 초록
         self.x = float(x)
         self.y = float(y)
+        self.dir = 0                   # 대각 방향도 처리해야하니 0~7까지 8방향으로 처리
+        self.dir = 0                   # 방향 (0 아래 / 1 왼쪽 / 2 오른쪽 / 3 위)
         self.state = 0                 # 0 대기 / 1 이동 / 2 채굴
         self.key_flags = 0
         self.mined = 0                 # 개인별 채굴 수
         self.mining_started_at = None
+
     def move(self, dt):
         print(dt)
         print(self.key_flags)
         if self.key_flags == 0:
             self.state = 0  # 대기
         else:
+            self.state = 1  # 이동
             dx, dy = 0, 0
+
             if self.key_flags & 0x01:  # 위
                 dy += 1
             if self.key_flags & 0x02:  # 아래
@@ -44,12 +48,26 @@ class Player:
                 dx -= 1
             if self.key_flags & 0x08:  # 오른쪽
                 dx += 1
-            # 플레이어의 키 입력이 이상할 수 있다 (왼쪽과 오른쪽을 동시에 누르거나 위와 아래를 동시에 누르는 경우) 따라서 dx, dy가 0이 될 수 있다. 이 경우 이동하지 않는다.
-            if dx == 0 and dy == 0:
-                self.state = 0
-                return
-            self.state = 1  # 이동
-            # 방향은 서버에서 계산할 필요 없다 클라에서 이전 위치와 현재 위치를 비교해서 계산한다.
+
+
+            # 방향 설정 (0~7)
+            if dx == -1 and dy == -1:
+                self.dir = 7  # 왼쪽 위
+            elif dx == -1 and dy == 0:
+                self.dir = 6  # 왼쪽
+            elif dx == -1 and dy == 1:
+                self.dir = 5  # 왼쪽 아래
+            elif dx == 0 and dy == -1:
+                self.dir = 0  # 위
+            elif dx == 0 and dy == 1:
+                self.dir = 4  # 아래
+            elif dx == 1 and dy == -1:
+                self.dir = 1  # 오른쪽 위
+            elif dx == 1 and dy == 0:
+                self.dir = 2  # 오른쪽
+            elif dx == 1 and dy == 1:
+                self.dir = 3  # 오른쪽 아래
+            print(dx, dy)
             # 이동 속도 적용 (초당 픽셀 이동량) dt는 실제 서버가 틱에 걸린시간
             speed_per_tick = constants.PLAYER_SPEED * dt
             self.x += dx * speed_per_tick
@@ -58,6 +76,7 @@ class Player:
             # 맵 경계 처리
             self.x = max(0, min(constants.WIDTH, self.x))
             self.y = max(0, min(constants.HEIGHT, self.y))
+
 
 class GoldSpot:
     def __init__(self, spot_id, x, y):
@@ -76,7 +95,6 @@ class World:
         self.remain = float(constants.TIME_LIMIT)
         self.ended = False
         self.events = []               # [11/24] 이번 틱에 생긴 GOLD_MINED 등. GameServer 가 꺼내서 전송한다
-        self.pending_gold_respawn = None
 
     def try_start_mining(self, player):
         if player.mining_started_at is None:
@@ -122,13 +140,6 @@ class World:
         events, self.events = self.events, []
         return events
 
-    def respawn_gold_if_empty(self):
-        if self.golds:
-            return
-        golds = generate_gold_spots()
-        self.golds = {spot_id: GoldSpot(spot_id, x, y) for spot_id, x, y in golds}
-        self.pending_gold_respawn = golds
-
     def apply_input(self, dt, input_datas):
         for player_id, key_flags in input_datas.items():
             if self.players[player_id].mining_started_at is not None:
@@ -141,32 +152,26 @@ class World:
                 self.try_start_mining(self.players[player_id])
             else:
                 self.players[player_id].state = 3  # 상점
+
     def update(self, dt, input_datas):
         # 게임 시작 후 GameServer가 매 틱 호출한다.
         # 입력을 적용한다
         self.apply_input(dt, input_datas)
         self.update_mining()            # [11/24] 채굴 시간이 끝난 플레이어는 complete_mining() 으로 마무리한다
-        # 아래의 주석들을 apply_input()에서 부른다
-        # 1. 플레이어 이동: 저장된 입력으로 이동하고 맵 경계를 보정한다.
-        # 2. 채굴 시도
-        # TODO(11/23): update_mining(dt) 연결 인듯 하지만 채굴진행도를 따로 저장하지 않기에 삭제해야 할듯
-        # 3. 채굴 완료 판정: 금괴 제거, 팀 금괴/개인 채굴 수 갱신, GOLD_MINED 이벤트 생성.
-        # TODO(11/24): complete_mining() 연결
         # 4. 금괴가 모두 없어지면 재생성하고 GOLD_RESPAWN 이벤트를 생성한다.
-        self.respawn_gold_if_empty()
+        # TODO(11/25): respawn_gold_if_empty() 연결
         # 5. 타이머 갱신과 종료 판정. 상점이 열려 있어도 시간은 흐른다.
         self.remain = max(0.0, self.remain - dt)
         if self.remain <= 0:
             self.ended = True
             # TODO(11/29): calc_result()로 최종 팀 금괴/개인 기여도 집계
 
-
     def snapshot(self):
         # [11/17] STATE 패킷에 넣을 값을 만든다. protocol.pack_state(*world.snapshot()) 로 바로 쓴다.
         # 반환 : (remain_x10, team_gold, item_level, players)  players = [(player_id, x, y, dir, state), ...]
-        remain_x10 = max(0, min(65535, round(self.remain * 10)))      # 남은 시간 (0.1초 단위)
+        remain_x10 = max(0, min(65535, round(self.remain * 10)))  # 남은 시간 (0.1초 단위)
         players = [(player.player_id, int(player.x), int(player.y), player.dir, player.state)
-                   for _, player in sorted(self.players.items())]     # player_id 순서로 고정
+                   for _, player in sorted(self.players.items())]  # player_id 순서로 고정
         return remain_x10, self.team_gold, self.item_level, players
 
 
