@@ -1,11 +1,20 @@
 """클라이언트가 화면에 표시할 서버의 게임 데이터"""
-import os, sys
+import os
+import sys
+import sdl2
+
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from common import protocol
 from common.constants import PLAYER_SPEED
+
+SHOP_RESULT_MESSAGES = {
+    0: "구매 완료!",
+    1: "금괴가 부족합니다.",
+    2: "이미 보유 중이거나 더 높은 등급의 장비가 있습니다.",
+    3: "잘못된 아이템 번호입니다.",
+}
 import sdl2
 global running
-
 
 class ClientWorld:
     def __init__(self):
@@ -20,6 +29,7 @@ class ClientWorld:
         self.running = False
         self.selection = 1               # 상점에서 선택된 아이템 번호 (1 장갑 ~ 4 드릴, 상점 진입시 기본 1)
         self.store_mode = False
+        self.shop_message = ""           # [11/27] 최근 상점 구매 결과 안내 메시지
 
     def init_from_start(self, time_limit, costs, players, gold_count, golds):
         self.time_limit = time_limit
@@ -36,14 +46,17 @@ class ClientWorld:
         self.remain_x10 = time_limit * 10
         self.team_gold = 0
         self.item_level = 0
+        self.shop_message = ""
         self.running = True
 
     def calc_dir(self, player_id, new_x, new_y):
-        # 단독 실행 등 dir 없이 좌표만 들어올 때 보조용 (dir : 0 아래 / 1 왼쪽 / 2 오른쪽 / 3 위)
+        # STATE 패킷에 dir 이 없을 때 좌표 변화량으로 방향 계산 (dir : 0 아래 / 1 왼쪽 / 2 오른쪽 / 3 위)
         player = self.players[player_id]
         dx = new_x - player['x']
         dy = new_y - player['y']
-        if abs(dx) > abs(dy):
+        if dx == 0 and dy == 0:
+            return
+        if abs(dx) >= abs(dy):
             player['dir'] = 2 if dx > 0 else 1
         else:
             player['dir'] = 3 if dy > 0 else 0
@@ -57,7 +70,8 @@ class ClientWorld:
                     player['dy'] = 0.0
                     continue
                 dx = speed * dt
-                if abs(player['dx']) < dx: dx = abs(player['dx'])
+                if abs(player['dx']) < dx:
+                    dx = abs(player['dx'])
 
                 if player['dx'] > 0:
                     player['x'] += dx
@@ -65,8 +79,10 @@ class ClientWorld:
                 else:
                     player['x'] -= dx
                     player['dx'] += dx
+
                 dy = speed * dt
-                if abs(player['dy']) < dy: dy = abs(player['dy'])
+                if abs(player['dy']) < dy:
+                    dy = abs(player['dy'])
                 if player['dy'] > 0:
                     player['y'] += dy
                     player['dy'] -= dy
@@ -84,6 +100,9 @@ class ClientWorld:
         elif name == 'StoC_GOLD_RESPAWN':
             data = protocol.unpack_gold_respawn(payload) if isinstance(payload, (bytes, bytearray)) else payload
             self.apply_gold_respawn(data)
+        elif name == 'StoC_SHOP_RESULT':
+            data = protocol.unpack_shop_result(payload) if isinstance(payload, (bytes, bytearray)) else payload
+            self.apply_shop_result(*data)
         elif name == 'StoC_STATE':
             data = protocol.unpack_state(payload) if isinstance(payload, (bytes, bytearray)) else payload
             remain_x10, team_gold, item_level, players = data
@@ -143,7 +162,47 @@ class ClientWorld:
                         self.store_mode = True
             client.play_state(events)
 
+    def apply_shop_result(self, result, item_id, item_level, team_gold):
+        # [11/27] 구매 결과 반영 : 성공 시 팀 아이템 등급과 팀 금괴 갱신, 실패 시 안내 메시지 기록
+        self.shop_message = SHOP_RESULT_MESSAGES.get(result, f"알 수 없는 응답 ({result})")
+        if result == 0:
+            self.item_level = item_level
+            self.team_gold = team_gold
+
+    def handle_store_key(self, event):
+        if event.key == sdl2.SDLK_w:        # 1,2 면 1, 3,4 면 3
+            self.selection = 1 if self.selection in (1, 2) else 3
+        elif event.key == sdl2.SDLK_s:      # 1,2 면 2, 3,4 면 4
+            self.selection = 2 if self.selection in (1, 2) else 4
+        elif event.key == sdl2.SDLK_a:      # 1,3 면 1, 2,4 면 2
+            self.selection = 1 if self.selection in (1, 3) else 2
+        elif event.key == sdl2.SDLK_d:      # 1,3 면 3, 2,4 면 4
+            self.selection = 3 if self.selection in (1, 3) else 4
+
+    def handle_event(self, events, client):     # 상점 모드 전환 및 구매 요청 처리
+        if self.store_mode:
+            for event in events:
+                if event.type == sdl2.SDL_KEYDOWN:
+                    if event.key == sdl2.SDLK_p:
+                        self.store_mode = False
+                        self.shop_message = ""
+                        if client is not None:
+                            client.exit_shop()
+                    elif event.key == sdl2.SDLK_SPACE:
+                        if client is not None:
+                            client.send_shop_buy(self.selection)
+                    else:
+                        self.handle_store_key(event)
+        else:
+            for event in events:
+                if event.type == sdl2.SDL_KEYDOWN:
+                    if event.key == sdl2.SDLK_p:
+                        self.store_mode = True
+            if client is not None:
+                client.play_state(events)
+
     def print_data(self):
+        print(f"ClientWorld: time_limit={self.time_limit}, costs={self.costs}, players={self.players}, gold_count={self.gold_count}, golds={self.golds}, remain_x10={self.remain_x10}, team_gold={self.team_gold}, item_level={self.item_level}, selection={self.selection}")
         print(f"ClientWorld: time_limit={self.time_limit}, costs={self.costs}, players={self.players}, gold_count={self.gold_count}, golds={self.golds}, remain_x10={self.remain_x10}, team_gold={self.team_gold}, item_level={self.item_level}, selection={self.selection}")
 
 

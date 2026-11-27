@@ -2,6 +2,7 @@
 import os
 import sys
 from time import monotonic
+
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from common import constants
 from server.gold_spawner import generate_gold_spots
@@ -47,7 +48,7 @@ class Player:
 
             if dx == 0 and dy == 0:     # 이동하지 않는 경우 즉 이상한 입력은 무시한다.
                 return
-            # 이동 속도 적용 (초당 픽셀 이동량) dt는 실제 서버가 틱에 걸린시간
+            # 이동 속도 적용 (초당 픽셀 이동량) dt는 실제 서버가 틱에 걸린 시간
             speed_per_tick = constants.PLAYER_SPEED * dt
             self.x += dx * speed_per_tick
             self.y += dy * speed_per_tick
@@ -69,16 +70,21 @@ class World:
     def __init__(self):
         self.players = {}              # player_id -> Player
         self.golds = {}                # spot_id -> GoldSpot
+        self.team_gold = 0             # 게임 루프 스레드 단일 수정으로 임계영역 안전
         self.team_gold = 0              # 임계영역 이지만 구조가 queue 에 message들을 받고 순서대로 꺼내는 구조라서 안전한 듯
         self.item_level = 0
         self.remain = float(constants.TIME_LIMIT)
         self.ended = False
         self.events = []               # [11/24] 이번 틱에 생긴 GOLD_MINED 등. GameServer 가 꺼내서 전송한다
         self.pending_gold_respawn = None
+
     def try_start_mining(self, player):
         if player.mining_started_at is None:
             player.mining_started_at = monotonic()
-            player.key_flags = 0
+            player.key_flags = 0        
+    def try_buy(self, item_id):
+        # [11/27] 상점 구매 검증 및 적용 (item_id: 1 장갑 ~ 4 드릴)
+        if item_id < 1 or item_id > 4:
     def try_buy(self, item_id):
         # [11/27] 상점 구매 시도. 플레이어가 충분한 팀 금괴를 가지고 있으면 아이템 등급을 올리고 True 반환.
         if item_id < 0 or item_id > 4:
@@ -89,8 +95,9 @@ class World:
         if self.team_gold >= cost:
             self.team_gold -= cost
             self.item_level = item_id
-            return 0        # 성공
-        return 1        # 골드 부족으로 인한 실패
+            return 0        # 성공 (update_mining 에서 ITEM_TABLE[self.item_level]['dig_time'] 자동 적용)
+        return 1            # 골드 부족으로 인한 실패
+
     def update_mining(self):
         # [11/24] 채굴 시간이 지난 플레이어의 채굴을 마무리한다. 채굴 시간은 팀 아이템 등급에 따라 5 ~ 1초.
         dig_time = ITEM_TABLE[self.item_level]['dig_time']
@@ -136,8 +143,17 @@ class World:
         self.golds = {spot_id: GoldSpot(spot_id, x, y) for spot_id, x, y in golds}
         self.pending_gold_respawn = golds
 
+    def respawn_gold_if_empty(self):
+        if self.golds:
+            return
+        golds = generate_gold_spots()
+        self.golds = {spot_id: GoldSpot(spot_id, x, y) for spot_id, x, y in golds}
+        self.pending_gold_respawn = golds
+
     def apply_input(self, dt, input_datas):
         for player_id, key_flags in input_datas.items():
+            if player_id not in self.players:
+                continue
             if self.players[player_id].mining_started_at is not None:
                 continue
             self.players[player_id].key_flags = key_flags
@@ -151,7 +167,6 @@ class World:
 
     def update(self, dt, input_datas):
         # 게임 시작 후 GameServer가 매 틱 호출한다.
-        # 입력을 적용한다
         self.apply_input(dt, input_datas)
         self.update_mining()            # [11/24] 채굴 시간이 끝난 플레이어는 complete_mining() 으로 마무리한다
         self.respawn_gold_if_empty()

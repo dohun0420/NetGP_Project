@@ -1,16 +1,15 @@
+import os
 import queue
+import sys
 import time
 
-import os
-import sys
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 
 from common import protocol
-from common.constants import TICK_RATE, PORT, TIME_LIMIT
-from server.session import EV_JOIN, EV_PACKET, EV_LEAVE, ClientSession
-from server.world import ITEM_TABLE, World, Player, GoldSpot
-from common import net_utils
-from gold_spawner import generate_gold_spots
+from common.constants import PORT, TICK_RATE, TIME_LIMIT
+from server.gold_spawner import generate_gold_spots
+from server.session import ClientSession, EV_JOIN, EV_LEAVE, EV_PACKET
+from server.world import GoldSpot, ITEM_TABLE, Player, World
 
 
 class GameServer:
@@ -25,7 +24,7 @@ class GameServer:
         self.udp_socket = udp_socket
         self.world = None                   # [11/17] 게임 시작 때 만들어진다 (start_game)
         self.input_datas = {}               # [11/19] 플레이어별 입력 상태를 저장한다. player_id -> key_flags
-        # 패킷 종류 -> 처리 함수. 새 패킷을 처리하는 함수를 만들면 여기에 한 줄 추가한다. 서버가 처리하니 Ctos_ 패킷만 들어간다.
+        # 패킷 종류 -> 처리 함수. 새 패킷을 처리하는 함수를 만들면 여기에 한 줄 추가한다. 서버가 처리하니 CtoS_ 패킷만 들어간다.
         self.packet_handlers = {
             protocol.packet_types["CtoS_INPUT"]: self.handle_input,
             protocol.packet_types["CtoS_SHOP_BUY"]: self.handle_shop_buy,
@@ -129,8 +128,22 @@ class GameServer:
         self.input_datas[session.player_id] = key_flags
 
     def handle_shop_buy(self, session, payload):
+        # [11/27] world.try_buy() 가 상태 변경과 result 판정을 수행하고,
+        # handle_shop_buy 는 protocol 규격(4개 필드)에 맞춰 패킷을 조립·전송한다.
+        if self.world is None:
+            return
         item_id = protocol.unpack_shop_buy(payload)
         result = self.world.try_buy(item_id)
+        packet = protocol.pack_shop_result(
+            result, item_id, self.world.item_level, self.world.team_gold
+        )
+        if result == 0:
+            # 구매 성공 시 전원에게 브로드캐스트 (계획서 5.4절 규칙)
+            for s in list(self.sessions):
+                s.send(packet)
+        else:
+            # 구매 실패 시 요청한 플레이어에게만 응답
+            session.send(packet)
         packet = protocol.pack_shop_result(result)
         session.send(packet)
         # 11/26 굳이 shop을 만들 필요없는듯 world에서 바로 처리하고 결과를 보내면 됨. shop.py 삭제
@@ -139,10 +152,11 @@ class GameServer:
         # 대기 인원수를 모든 세션에 전송한다. (게임 시작 전 로비 상태)
         waiting_count = len(self.sessions)
         packet = protocol.pack_lobby_state(waiting_count)
-        address = ('<broadcast>', PORT - 1) # 브로드캐스트 주소와 포트 설정
-        self.udp_socket.sendto(packet, address)
+        address = ('<broadcast>', PORT - 1)  # 브로드캐스트 주소와 포트 설정
+        if self.udp_socket is not None:
+            self.udp_socket.sendto(packet, address)
 
-    # ------------------------------------------------------------ 매 틱 처리 (이후 채워 나간다)
+    # ------------------------------------------------------------ 매 틱 처리
     def update(self, dt, input_datas=None):
         if input_datas is None:
             input_datas = self.input_datas
