@@ -89,7 +89,7 @@ for i, c in enumerate(clients):
     names = [n for n, _ in msgs]
     assert names[0] == "StoC_JOIN_OK" and msgs[0][1] == i, names[:3]
     assert names[1] == "StoC_GAME_START" and set(names[2:]) == {"StoC_STATE"}, set(names)
-    states = [p.unpack_state(v) for n, v in msgs[2:]]
+    states = [v for n, v in msgs[2:]]
     assert 15 <= len(states) <= 24, len(states)
     assert [pl[0] for pl in states[0][3]] == [0, 1, 2]
     assert states[0][0] > states[-1][0]

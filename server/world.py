@@ -2,10 +2,10 @@
 import os
 import sys
 from time import monotonic
+
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from common import constants
 from server.gold_spawner import generate_gold_spots
-
 
 # 기존 문자열 상수를 패킷의 아이템 번호(0 기본, 1 장갑 ~ 4 드릴)에 연결한다.
 # 팀 전체에 적용되는 아이템이므로 계획서에 따라 기본 비용의 2배로 조립한다.
@@ -25,19 +25,18 @@ class Player:
         self.player_id = player_id     # 0 빨강 / 1 파랑 / 2 초록
         self.x = float(x)
         self.y = float(y)
-        self.dir = 0                   # 방향 (0 아래 / 1 왼쪽 / 2 오른쪽 / 3 위)
         self.state = 0                 # 0 대기 / 1 이동 / 2 채굴
         self.key_flags = 0
         self.mined = 0                 # 개인별 채굴 수
         self.mining_started_at = None
 
     def move(self, dt):
-        print(dt)
-        print(self.key_flags)
         if self.key_flags == 0:
             self.state = 0  # 대기
         else:
+            self.state = 1  # 이동
             dx, dy = 0, 0
+
             if self.key_flags & 0x01:  # 위
                 dy += 1
             if self.key_flags & 0x02:  # 아래
@@ -46,14 +45,10 @@ class Player:
                 dx -= 1
             if self.key_flags & 0x08:  # 오른쪽
                 dx += 1
-            if dx == 0 and dy == 0:
-                self.state = 0
+
+            if dx == 0 and dy == 0:     # 이동하지 않는 경우 즉 이상한 입력은 무시한다.
                 return
-            self.state = 1  # 이동
-            if abs(dx) >= abs(dy):
-                self.dir = 2 if dx > 0 else 1
-            else:
-                self.dir = 3 if dy > 0 else 0
+            # 이동 속도 적용 (초당 픽셀 이동량) dt는 실제 서버가 틱에 걸린 시간
             speed_per_tick = constants.PLAYER_SPEED * dt
             self.x += dx * speed_per_tick
             self.y += dy * speed_per_tick
@@ -75,7 +70,7 @@ class World:
     def __init__(self):
         self.players = {}              # player_id -> Player
         self.golds = {}                # spot_id -> GoldSpot
-        self.team_gold = 0
+        self.team_gold = 0             # 게임 루프 스레드 단일 수정으로 임계영역 안전
         self.item_level = 0
         self.remain = float(constants.TIME_LIMIT)
         self.ended = False
@@ -86,6 +81,19 @@ class World:
         if player.mining_started_at is None:
             player.mining_started_at = monotonic()
             player.key_flags = 0
+
+    def try_buy(self, item_id):
+        # [11/27] 상점 구매 검증 및 적용 (item_id: 1 장갑 ~ 4 드릴)
+        if item_id < 1 or item_id > 4:
+            return 3        # 잘못된 번호
+        if self.item_level >= item_id:
+            return 2        # 현재 등급 이하
+        cost = ITEM_TABLE[item_id]['cost']
+        if self.team_gold >= cost:
+            self.team_gold -= cost
+            self.item_level = item_id
+            return 0        # 성공 (update_mining 에서 ITEM_TABLE[self.item_level]['dig_time'] 자동 적용)
+        return 1            # 골드 부족으로 인한 실패
 
     def update_mining(self):
         # [11/24] 채굴 시간이 지난 플레이어의 채굴을 마무리한다. 채굴 시간은 팀 아이템 등급에 따라 5 ~ 1초.
@@ -135,6 +143,8 @@ class World:
 
     def apply_input(self, dt, input_datas):
         for player_id, key_flags in input_datas.items():
+            if player_id not in self.players:
+                continue
             if self.players[player_id].mining_started_at is not None:
                 continue
             self.players[player_id].key_flags = key_flags
@@ -151,6 +161,7 @@ class World:
         self.apply_input(dt, input_datas)
         self.update_mining()            # [11/24] 채굴 시간이 끝난 플레이어는 complete_mining() 으로 마무리한다
         self.respawn_gold_if_empty()
+        # 5. 타이머 갱신과 종료 판정. 상점이 열려 있어도 시간은 흐른다.
         self.remain = max(0.0, self.remain - dt)
         if self.remain <= 0:
             self.ended = True
@@ -158,17 +169,26 @@ class World:
 
     def snapshot(self):
         # 반환 : (remain_x10, team_gold, item_level, players)  players = [(player_id, x, y, state), ...]
-        remain_x10 = max(0, min(65535, round(self.remain * 10)))      # 남은 시간 (0.1초 단위)
+        remain_x10 = max(0, min(65535, round(self.remain * 10)))  # 남은 시간 (0.1초 단위)
         players = [(player.player_id, int(player.x), int(player.y), player.state)
-                   for _, player in sorted(self.players.items())]     # player_id 순서로 고정
+                   for _, player in sorted(self.players.items())]  # player_id 순서로 고정
         return remain_x10, self.team_gold, self.item_level, players
 
 
 if __name__ == "__main__":
+    # 테스트용 코드
     world = World()
     world.players[0] = Player(0, 400.9, 299.2)
     world.players[1] = Player(1, 500, 300)
     world.players[2] = Player(2, 600, 300)
-    world.update(0.4, {0: 0, 1: 0x09, 2: 0})
+    world.update(0.4, {0: 0, 1: 0x09, 2: 0})  # 0.4초 동안 입력 적용
     for player_id, player in world.players.items():
-        print(f"Player {player_id}: x={player.x}, y={player.y}, dir={player.dir}, state={player.state}")
+        print(f"Player {player_id}: x={player.x}, y={player.y}, state={player.state}")
+    # try_buy 테스트
+    world.team_gold = 11
+    print(world.try_buy(1))  # 장갑 구매 시도, 성공하면 0 반환
+    print(world.item_level)  # item_level이 1로 올라 있는지 확인
+    print(world.team_gold)
+    print(world.try_buy(1))  # 이미 장갑을 가지고 있으므로 2 반환
+    print(world.try_buy(5))  # 잘못된 아이템 번호이므로 3 반환
+    print(world.try_buy(2))  # 삽 구매 시도, 골드 부족이면 1 반환

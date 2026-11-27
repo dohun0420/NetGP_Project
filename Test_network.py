@@ -72,10 +72,11 @@ assert [p.unpack_input(got[0][3]), p.unpack_shop_buy(got[1][3]), p.unpack_input(
 print("3) 조립 OK : 붙어서/쪼개져서 와도 EV_PACKET 3개 (순서 유지)")
 
 # 4) 서버 -> 클라 : 해석 함수가 있는 패킷은 값으로, 없는 패킷은 본문 바이트로 inbox 에 들어오는가
+sample_state = (1800, 10, 1, [(0, 400, 300, 0), (1, 500, 300, 1), (2, 600, 300, 2)])
 session.send(p.pack_join_ok(2) + p.pack_lobby_state(3) + p.pack_error(p.ERR_PLAYER_LEFT)
-             + p.pack_header(p.packet_types["StoC_STATE"], 3) + b"abc")
+             + p.pack_state(*sample_state))
 msgs = wait_messages(client, 4)
-assert msgs == [("StoC_JOIN_OK", 2), ("StoC_LOBBY_STATE", 3), ("StoC_ERROR", 3), ("StoC_STATE", b"abc")], msgs
+assert msgs == [("StoC_JOIN_OK", 2), ("StoC_LOBBY_STATE", 3), ("StoC_ERROR", 3), ("StoC_STATE", sample_state)], msgs
 print("4) 클라 수신 OK : poll() ->", msgs)
 
 # 5) 한동안 아무것도 안 보내도(서버 recv timeout 2초) 연결이 유지되는가
