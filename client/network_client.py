@@ -159,6 +159,8 @@ class NetworkClient:
             flags |= protocol.KEY_D
         if 'space' in keys:
             flags |= protocol.KEY_SPACE
+        if 'p' in keys:
+            flags = 0  # 상점 진입시 key_flags 는 0
         return flags
 
     def send_input(self, key_flags):
@@ -176,6 +178,7 @@ class NetworkClient:
                 elif event.key == SDLK_d:
                     self.keys.add('d')
                 elif event.key == SDLK_p:
+                elif event.key == SDLK_p:      # 상점 진입시 key_flags 는 0
                     self.keys.add('p')
                 elif event.key == SDLK_SPACE:
                     self.keys.add('space')
@@ -198,11 +201,14 @@ class NetworkClient:
             self.send_input(key_flags)
             self.last_sent_flags = key_flags
             self.last_input_time = now
-
+            
     def exit_shop(self):
         self.keys.discard('p')
         self.last_sent_flags = None  # 상점 종료 직후 현재 키 상태를 즉시 다시 전송하도록 초기화
-
+            self.last_input_time = time.time()
+        self.last_input_time = time.time()
+    def exit_shop(self):
+        self.keys.discard('p')  # 상점에서 나올 때 p 키를 제거하여 상점 모드 종료
     def send_shop_buy(self, item_id):
         return self.send(protocol.pack_shop_buy(item_id))
 

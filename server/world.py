@@ -71,6 +71,7 @@ class World:
         self.players = {}              # player_id -> Player
         self.golds = {}                # spot_id -> GoldSpot
         self.team_gold = 0             # 게임 루프 스레드 단일 수정으로 임계영역 안전
+        self.team_gold = 0              # 임계영역 이지만 구조가 queue 에 message들을 받고 순서대로 꺼내는 구조라서 안전한 듯
         self.item_level = 0
         self.remain = float(constants.TIME_LIMIT)
         self.ended = False
@@ -80,11 +81,13 @@ class World:
     def try_start_mining(self, player):
         if player.mining_started_at is None:
             player.mining_started_at = monotonic()
-            player.key_flags = 0
-
+            player.key_flags = 0        
     def try_buy(self, item_id):
         # [11/27] 상점 구매 검증 및 적용 (item_id: 1 장갑 ~ 4 드릴)
         if item_id < 1 or item_id > 4:
+    def try_buy(self, item_id):
+        # [11/27] 상점 구매 시도. 플레이어가 충분한 팀 금괴를 가지고 있으면 아이템 등급을 올리고 True 반환.
+        if item_id < 0 or item_id > 4:
             return 3        # 잘못된 번호
         if self.item_level >= item_id:
             return 2        # 현재 등급 이하
@@ -133,6 +136,12 @@ class World:
         # [11/24] 쌓인 이벤트를 꺼내고 비운다. (GameServer.broadcast_gold_mined 가 호출)
         events, self.events = self.events, []
         return events
+    def respawn_gold_if_empty(self):
+        if self.golds:
+            return
+        golds = generate_gold_spots()
+        self.golds = {spot_id: GoldSpot(spot_id, x, y) for spot_id, x, y in golds}
+        self.pending_gold_respawn = golds
 
     def respawn_gold_if_empty(self):
         if self.golds:

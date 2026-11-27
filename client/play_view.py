@@ -6,7 +6,6 @@ from player_view import PlayerView
 from Selection_view import Selection
 from Store import Store
 
-
 def facing_from_dir(direction):
     # dir : 0 아래 / 1 왼쪽 / 2 오른쪽 / 3 위
     if direction == 1:
@@ -55,6 +54,7 @@ class PlayView:
             self.store.draw()
             self.selection.draw()
             self.hud.draw_count_only(world.team_gold)  # 상점 모드에서는 gold count 만 그린다.
+            
             # [11/27] 서버가 GAME_START 로 전달한 3인 기준 비용표 및 보유/구매 결과 표시
             if len(world.costs) == 4:
                 cost_positions = ((320, 354), (320, 164), (820, 354), (820, 164))
@@ -64,6 +64,7 @@ class PlayView:
                     self.shop_font.draw(cx, cy - 55, label, color)
             if world.shop_message:
                 self.shop_font.draw(320, 510, world.shop_message, (255, 230, 100))
+                
         else:
             self.map.draw()
             self.golds.draw(world.golds)

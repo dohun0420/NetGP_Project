@@ -13,7 +13,8 @@ SHOP_RESULT_MESSAGES = {
     2: "이미 보유 중이거나 더 높은 등급의 장비가 있습니다.",
     3: "잘못된 아이템 번호입니다.",
 }
-
+import sdl2
+global running
 
 class ClientWorld:
     def __init__(self):
@@ -133,6 +134,33 @@ class ClientWorld:
     def apply_gold_respawn(self, golds):
         self.golds = {spot_id: {'x': x, 'y': y} for spot_id, x, y in golds}
         self.gold_count = len(self.golds)
+    def handle_store_key(self, event):
+        if event.key == sdl2.SDLK_w:        # 1,2 면 1, 3,4 면 3
+            self.selection = 1 if self.selection in (1, 2) else 3
+        elif event.key == sdl2.SDLK_s:      # 1,2 면 2, 3,4 면 4
+            self.selection = 2 if self.selection in (1, 2) else 4
+        elif event.key == sdl2.SDLK_a:      # 1,3 면 1, 2,4 면 2
+            self.selection = 1 if self.selection in (1, 3) else 2
+        elif event.key == sdl2.SDLK_d:      # 1,3 면 3, 2,4 면 4
+            self.selection = 3 if self.selection in (1, 3) else 4
+
+
+    def handle_event(self, events, client):     # 상점 모드 전환용 이벤트 처리
+        if self.store_mode:
+            for event in events:
+                if event.type == sdl2.SDL_KEYDOWN:
+                    if event.key == sdl2.SDLK_p:
+                        self.store_mode = False
+                        client.exit_shop()
+                    else:
+                        self.handle_store_key(event)
+                        client.send_shop_buy(self.selection)
+        else:
+            for event in events:
+                if event.type == sdl2.SDL_KEYDOWN:
+                    if event.key == sdl2.SDLK_p:
+                        self.store_mode = True
+            client.play_state(events)
 
     def apply_shop_result(self, result, item_id, item_level, team_gold):
         # [11/27] 구매 결과 반영 : 성공 시 팀 아이템 등급과 팀 금괴 갱신, 실패 시 안내 메시지 기록
@@ -175,3 +203,123 @@ class ClientWorld:
 
     def print_data(self):
         print(f"ClientWorld: time_limit={self.time_limit}, costs={self.costs}, players={self.players}, gold_count={self.gold_count}, golds={self.golds}, remain_x10={self.remain_x10}, team_gold={self.team_gold}, item_level={self.item_level}, selection={self.selection}")
+        print(f"ClientWorld: time_limit={self.time_limit}, costs={self.costs}, players={self.players}, gold_count={self.gold_count}, golds={self.golds}, remain_x10={self.remain_x10}, team_gold={self.team_gold}, item_level={self.item_level}, selection={self.selection}")
+
+
+if __name__ == '__main__':
+    import play_view
+    import pico2d
+
+    world = ClientWorld()
+
+    name = 'StoC_GAME_START'
+    time_limit = 180
+    costs = (10, 14, 24, 40)
+    players = [(0, 100, 200), (1, 100, 100), (2, 900, 400)]
+    gold_count = 3
+    golds = [(7, 1000, 1), (8, 100, 200), (9, 300, 400)]
+    value = (time_limit, costs, players, gold_count, golds)
+    world.apply_world_message(name, value)
+    world.print_data()
+    pico2d.open_canvas(1000, 600)
+    render = play_view.PlayView()
+    render.update(world)
+    pico2d.clear_canvas()
+    render.draw(world)
+    pico2d.update_canvas()
+    pico2d.delay(1)
+    '''
+    name = 'StoC_STATE'
+    remain_x10 = 1799
+    team_gold = 0
+    item_level = 0
+    players = [(0, 100, 200, 0), (1, 200, 200, 1), (2, 900, 400, 2)]
+    value = remain_x10, team_gold, item_level, players
+    world.apply_world_message(name, value)
+    world.print_data()
+    pico2d.clear_canvas()
+    render.draw(world)
+    pico2d.delay(1)
+    for i in range(10):
+        world.update(0.1)
+        render.update(world)
+        pico2d.clear_canvas()
+        render.draw(world)
+        pico2d.update_canvas()
+        pico2d.delay(0.1)
+    world.print_data()
+    render.update(world)
+    render.draw(world)
+    pico2d.update_canvas()
+    pico2d.delay(1)
+    '''
+    # 상점 모드 테스트 테스트시 world handle_event()의 client 관련 부분을 주석 처리하고 실행
+    class key_event:
+        def __init__(self, key):
+            self.type = sdl2.SDL_KEYDOWN
+            self.key = key
+
+    key = sdl2.SDLK_p
+    events = key_event(key)
+
+    world.handle_event([events], None)
+    world.print_data()
+    render.update(world)
+    pico2d.clear_canvas()
+    render.draw(world)
+    pico2d.update_canvas()
+    pico2d.delay(1)
+
+    events.key = sdl2.SDLK_w        # 1 인 상황에서 w 누르면 1
+    world.handle_event([events], None)
+    world.print_data()
+    render.update(world)
+    pico2d.clear_canvas()
+    render.draw(world)
+    pico2d.update_canvas()
+    pico2d.delay(1)
+
+    events.key = sdl2.SDLK_s
+    world.handle_event([events], None)
+    world.print_data()
+    render.update(world)
+    pico2d.clear_canvas()
+    render.draw(world)
+    pico2d.update_canvas()
+    pico2d.delay(1)
+
+    events.key = sdl2.SDLK_d
+    world.handle_event([events], None)
+    world.print_data()
+    render.update(world)
+    pico2d.clear_canvas()
+    render.draw(world)
+    pico2d.update_canvas()
+    pico2d.delay(1)
+
+    events.key = sdl2.SDLK_a
+    world.handle_event([events], None)
+    world.print_data()
+    render.update(world)
+    pico2d.clear_canvas()
+    render.draw(world)
+    pico2d.update_canvas()
+    pico2d.delay(1)
+
+    events.key = sdl2.SDLK_a
+    world.handle_event([events], None)
+    world.print_data()
+    render.update(world)
+    pico2d.clear_canvas()
+    render.draw(world)
+    pico2d.update_canvas()
+    pico2d.delay(1)
+
+    events.key = sdl2.SDLK_w
+    world.handle_event([events], None)
+    world.print_data()
+    render.update(world)
+    pico2d.clear_canvas()
+    render.draw(world)
+    pico2d.update_canvas()
+    pico2d.delay(1)

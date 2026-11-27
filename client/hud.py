@@ -31,3 +31,5 @@ class HUD:
         remain_sec = (remain_x10 + 9) // 10
         self.timer_image.draw(900, 560, 100, 100)
         self.timer_font.draw(925, 560, f'{remain_sec}', (255, 255, 255))
+    def draw_count_only(self, team_gold):       # 기존 gold count 만 그리는 용도 (상점 모드에서만 사용)
+        self.gold_font.draw(120, 510, f'X {team_gold}', (0, 0, 0))

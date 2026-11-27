@@ -144,6 +144,9 @@ class GameServer:
         else:
             # 구매 실패 시 요청한 플레이어에게만 응답
             session.send(packet)
+        packet = protocol.pack_shop_result(result)
+        session.send(packet)
+        # 11/26 굳이 shop을 만들 필요없는듯 world에서 바로 처리하고 결과를 보내면 됨. shop.py 삭제
 
     def broadcast_LobbyState(self):
         # 대기 인원수를 모든 세션에 전송한다. (게임 시작 전 로비 상태)
