@@ -1,4 +1,3 @@
-from pico2d import load_font
 from gold_view import GoldView
 from hud import HUD
 from map_view import MapView
@@ -28,7 +27,6 @@ class PlayView:
         self.players = {}                   # player_id -> PlayerView (처음 나왔을 때 만든다)
         self.selection = Selection()
         self.store = Store()
-        self.shop_font = load_font('arial.ttf', 22)
 
     def _player_view(self, player_id):
         if player_id not in self.players:
@@ -54,17 +52,6 @@ class PlayView:
             self.store.draw()
             self.selection.draw()
             self.hud.draw_count_only(world.team_gold)  # 상점 모드에서는 gold count 만 그린다.
-            
-            # [11/27] 서버가 GAME_START 로 전달한 3인 기준 비용표 및 보유/구매 결과 표시
-            if len(world.costs) == 4:
-                cost_positions = ((320, 354), (320, 164), (820, 354), (820, 164))
-                for idx, (cx, cy) in enumerate(cost_positions, start=1):
-                    label = "OWNED" if world.item_level >= idx else f"COST: {world.costs[idx - 1]}"
-                    color = (100, 255, 100) if world.item_level >= idx else (255, 255, 255)
-                    self.shop_font.draw(cx, cy - 55, label, color)
-            if world.shop_message:
-                self.shop_font.draw(320, 510, world.shop_message, (255, 230, 100))
-                
         else:
             self.map.draw()
             self.golds.draw(world.golds)
